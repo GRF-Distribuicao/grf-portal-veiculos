@@ -48,25 +48,25 @@ const benefits = [
 
 function Home() {
   return (
-    <div className="flex min-h-screen flex-col bg-[#070d0c] text-white">
+    <div className="flex min-h-screen flex-col bg-[#050b0a] text-white">
       <PublicHeader />
 
-      <section className="relative isolate overflow-hidden bg-[radial-gradient(circle_at_75%_55%,rgba(0,170,60,0.20),transparent_38%),linear-gradient(110deg,#070d0c_0%,#09130f_45%,#102419_100%)]">
-        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_48%_45%,rgba(255,255,255,0.035),transparent_42%)]" />
+      <section className="relative isolate overflow-hidden bg-[radial-gradient(circle_at_76%_58%,rgba(0,175,62,0.24),transparent_34%),radial-gradient(circle_at_48%_48%,rgba(255,255,255,0.025),transparent_38%),linear-gradient(110deg,#050b0a_0%,#07120e_48%,#102519_100%)]">
+        <div className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(0,0,0,0.12),transparent_52%,rgba(0,0,0,0.08))]" />
 
-        <div className="mx-auto grid min-h-[660px] max-w-[1440px] items-center gap-5 px-6 py-14 sm:px-10 lg:grid-cols-[0.92fr_1.08fr] lg:px-14 lg:py-12">
-          <div className="relative z-10 max-w-[600px]">
-            <span className="inline-flex rounded-full border border-[#18a936] px-5 py-2 text-sm font-bold tracking-wide text-white uppercase">
+        <div className="mx-auto grid min-h-[670px] max-w-[1536px] items-center gap-2 px-6 py-14 sm:px-10 lg:grid-cols-[0.83fr_1.17fr] lg:px-14 lg:py-10">
+          <div className="relative z-20 max-w-[610px] lg:pb-3">
+            <span className="inline-flex rounded-full border border-[#16a832] px-5 py-2 text-sm font-bold tracking-wide text-white uppercase">
               Portal do transportador
             </span>
 
-            <h1 className="mt-8 max-w-[560px] text-5xl leading-[0.98] font-extrabold tracking-tight sm:text-6xl lg:text-[76px]">
+            <h1 className="mt-8 max-w-[590px] text-5xl leading-[0.98] font-extrabold tracking-tight sm:text-6xl lg:text-[76px]">
               Cadastro de
               <br />
               veículos GRF
             </h1>
 
-            <p className="mt-7 max-w-[575px] text-lg leading-8 text-white/90 sm:text-xl">
+            <p className="mt-7 max-w-[590px] text-lg leading-8 text-white/90 sm:text-xl">
               Agregados, terceiros e frota própria: envie os dados do veículo, do motorista e os
               documentos em um único fluxo. A equipe GRF analisa e responde pelo protocolo.
             </p>
@@ -75,7 +75,7 @@ function Home() {
               <Button
                 asChild
                 size="lg"
-                className="h-[66px] min-w-[280px] bg-[#18a936] px-6 text-lg font-bold text-white shadow-xl hover:bg-[#21bd42]"
+                className="h-[66px] min-w-[288px] bg-[#16a832] px-6 text-lg font-bold text-white shadow-xl shadow-black/25 hover:bg-[#20bd3f]"
               >
                 <Link to="/cadastro">
                   <Truck className="size-6" aria-hidden="true" />
@@ -98,25 +98,28 @@ function Home() {
             </div>
           </div>
 
-          <div className="relative flex min-h-[420px] items-center justify-center lg:min-h-[570px]">
-            <div className="absolute right-[10%] top-[18%] h-[390px] w-[390px] rounded-full bg-[#00c853]/12 blur-[70px]" />
+          <div className="relative flex min-h-[430px] items-center justify-center lg:min-h-[590px]">
+            <div className="absolute right-[10%] top-[28%] h-[420px] w-[520px] rounded-full bg-[#00c853]/15 blur-[85px]" />
             <img
-              src="/grf-truck.svg"
+              src="/grf-caminhao-exato.png.png"
               alt="Caminhão GRF Distribuição"
-              className="relative z-10 w-full max-w-[790px] drop-shadow-[0_28px_35px_rgba(0,0,0,0.55)] lg:translate-x-6"
+              className="relative z-10 w-full max-w-[900px] object-contain drop-shadow-[0_30px_35px_rgba(0,0,0,0.58)] lg:translate-x-5 lg:scale-[1.08]"
+              loading="eager"
+              width={1200}
+              height={800}
             />
           </div>
         </div>
       </section>
 
-      <section className="border-t border-white/10 bg-[#070d0c]">
-        <div className="mx-auto grid max-w-[1440px] grid-cols-1 divide-y divide-white/15 px-6 py-7 sm:px-10 md:grid-cols-2 md:divide-x md:divide-y-0 lg:grid-cols-4 lg:px-14">
+      <section className="border-t border-white/10 bg-[#050b0a]">
+        <div className="mx-auto grid max-w-[1536px] grid-cols-1 divide-y divide-white/15 px-6 py-7 sm:px-10 md:grid-cols-2 md:divide-x md:divide-y-0 lg:grid-cols-4 lg:px-14">
           {benefits.map((item) => (
-            <div key={item.title} className="flex min-h-[125px] items-center gap-5 px-5 py-5 lg:px-7">
-              <item.icon className="size-14 shrink-0 stroke-[1.7] text-[#18a936]" aria-hidden="true" />
+            <div key={item.title} className="flex min-h-[130px] items-center gap-5 px-5 py-5 lg:px-7">
+              <item.icon className="size-14 shrink-0 stroke-[1.7] text-[#20b83b]" aria-hidden="true" />
               <div>
                 <h2 className="text-xl font-bold">{item.title}</h2>
-                <p className="mt-2 max-w-[240px] text-sm leading-6 text-white/70">{item.text}</p>
+                <p className="mt-2 max-w-[245px] text-sm leading-6 text-white/70">{item.text}</p>
               </div>
             </div>
           ))}

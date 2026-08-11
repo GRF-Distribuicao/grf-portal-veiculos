@@ -1,21 +1,21 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ClipboardCheck, FileCheck2, ShieldCheck, Search, ArrowRight } from "lucide-react";
+import { ArrowRight, CheckCircle2, FileText, Search, ShieldCheck, Truck } from "lucide-react";
 import { PublicHeader, PublicFooter } from "@/components/grf/chrome";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Portal GRF – Cadastro de Veículos para Transportadores" },
+      { title: "Portal GRF – Cadastro de Veículos" },
       {
         name: "description",
         content:
-          "Cadastre seu veículo na GRF em poucos minutos: dados do transportador, veículo, motorista, rastreamento e documentos para análise.",
+          "Portal GRF para cadastro de veículos, envio de documentos e acompanhamento do protocolo.",
       },
       { property: "og:title", content: "Portal GRF – Cadastro de Veículos" },
       {
         property: "og:description",
-        content: "Cadastro de veículos e envio de documentos para a equipe GRF analisar.",
+        content: "Cadastro de veículos e envio de documentos para análise da equipe GRF.",
       },
       { name: "robots", content: "index,follow" },
     ],
@@ -23,73 +23,105 @@ export const Route = createFileRoute("/")({
   component: Home,
 });
 
-const steps = [
-  { icon: ClipboardCheck, title: "Preencha o formulário", text: "6 etapas rápidas: transportador, veículo, motorista, rastreamento e documentos." },
-  { icon: FileCheck2, title: "Envie os documentos", text: "CRLV, documento do proprietário e CNH em PDF, JPG ou PNG." },
-  { icon: ShieldCheck, title: "Análise da GRF", text: "Nossa equipe valida os dados e aprova ou devolve para correção." },
+const benefits = [
+  {
+    icon: ShieldCheck,
+    title: "Processo Seguro",
+    text: "Seus dados e documentos protegidos com segurança.",
+  },
+  {
+    icon: FileText,
+    title: "Envio de Documentos",
+    text: "PDF, JPG ou PNG – até 10 MB por arquivo.",
+  },
+  {
+    icon: CheckCircle2,
+    title: "Análise Rápida",
+    text: "A equipe GRF analisa e retorna o protocolo.",
+  },
+  {
+    icon: CheckCircle2,
+    title: "Acompanhe Online",
+    text: "Consulte o status do seu cadastro a qualquer momento.",
+  },
 ];
 
 function Home() {
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col bg-[#070d0c] text-white">
       <PublicHeader />
 
-      <section className="grf-hero">
-        <div className="mx-auto max-w-6xl px-4 py-14 sm:py-20">
-          <span className="inline-flex rounded-full border border-white/25 px-3 py-1 text-xs font-semibold tracking-wide uppercase">
-            Portal do transportador
-          </span>
-          <h1 className="mt-5 max-w-2xl text-4xl leading-tight font-extrabold sm:text-5xl">
-            Cadastro de veículos GRF
-          </h1>
-          <p className="mt-4 max-w-xl text-base opacity-85 sm:text-lg">
-            Agregados, terceiros e frota própria: envie os dados do veículo, do motorista e os
-            documentos em um único fluxo. A equipe GRF analisa e responde pelo protocolo.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Button asChild size="lg" variant="secondary" className="font-semibold">
-              <Link to="/cadastro">
-                Cadastrar veículo <ArrowRight className="size-4" />
-              </Link>
-            </Button>
-            <Button
-              asChild
-              size="lg"
-              variant="outline"
-              className="border-white/30 bg-transparent font-semibold text-primary-foreground hover:bg-white/10 hover:text-primary-foreground"
-            >
-              <Link to="/consulta">
-                <Search className="size-4" /> Consultar protocolo
-              </Link>
-            </Button>
+      <section className="relative isolate overflow-hidden bg-[radial-gradient(circle_at_75%_55%,rgba(0,170,60,0.20),transparent_38%),linear-gradient(110deg,#070d0c_0%,#09130f_45%,#102419_100%)]">
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_48%_45%,rgba(255,255,255,0.035),transparent_42%)]" />
+
+        <div className="mx-auto grid min-h-[660px] max-w-[1440px] items-center gap-5 px-6 py-14 sm:px-10 lg:grid-cols-[0.92fr_1.08fr] lg:px-14 lg:py-12">
+          <div className="relative z-10 max-w-[600px]">
+            <span className="inline-flex rounded-full border border-[#18a936] px-5 py-2 text-sm font-bold tracking-wide text-white uppercase">
+              Portal do transportador
+            </span>
+
+            <h1 className="mt-8 max-w-[560px] text-5xl leading-[0.98] font-extrabold tracking-tight sm:text-6xl lg:text-[76px]">
+              Cadastro de
+              <br />
+              veículos GRF
+            </h1>
+
+            <p className="mt-7 max-w-[575px] text-lg leading-8 text-white/90 sm:text-xl">
+              Agregados, terceiros e frota própria: envie os dados do veículo, do motorista e os
+              documentos em um único fluxo. A equipe GRF analisa e responde pelo protocolo.
+            </p>
+
+            <div className="mt-9 flex flex-wrap gap-4">
+              <Button
+                asChild
+                size="lg"
+                className="h-[66px] min-w-[280px] bg-[#18a936] px-6 text-lg font-bold text-white shadow-xl hover:bg-[#21bd42]"
+              >
+                <Link to="/cadastro">
+                  <Truck className="size-6" aria-hidden="true" />
+                  Cadastrar veículo
+                  <ArrowRight className="ml-auto size-6" aria-hidden="true" />
+                </Link>
+              </Button>
+
+              <Button
+                asChild
+                size="lg"
+                variant="outline"
+                className="h-[66px] min-w-[245px] border-white/45 bg-transparent px-6 text-lg font-bold text-white hover:bg-white/10 hover:text-white"
+              >
+                <Link to="/consulta" search={{ mode: "plate" } as never}>
+                  <Search className="size-6" aria-hidden="true" />
+                  Consultar placa
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          <div className="relative flex min-h-[420px] items-center justify-center lg:min-h-[570px]">
+            <div className="absolute right-[10%] top-[18%] h-[390px] w-[390px] rounded-full bg-[#00c853]/12 blur-[70px]" />
+            <img
+              src="/grf-truck.svg"
+              alt="Caminhão GRF Distribuição"
+              className="relative z-10 w-full max-w-[790px] drop-shadow-[0_28px_35px_rgba(0,0,0,0.55)] lg:translate-x-6"
+            />
           </div>
         </div>
       </section>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-12">
-        <h2 className="text-xl font-bold">Como funciona</h2>
-        <div className="mt-6 grid gap-4 sm:grid-cols-3">
-          {steps.map((s, i) => (
-            <div key={s.title} className="rounded-lg border border-border bg-card p-5">
-              <div className="flex items-center gap-3">
-                <span className="grid size-9 place-items-center rounded-md bg-secondary text-secondary-foreground">
-                  <s.icon className="size-5" />
-                </span>
-                <span className="font-display text-sm font-bold text-muted-foreground">
-                  Etapa {i + 1}
-                </span>
+      <section className="border-t border-white/10 bg-[#070d0c]">
+        <div className="mx-auto grid max-w-[1440px] grid-cols-1 divide-y divide-white/15 px-6 py-7 sm:px-10 md:grid-cols-2 md:divide-x md:divide-y-0 lg:grid-cols-4 lg:px-14">
+          {benefits.map((item) => (
+            <div key={item.title} className="flex min-h-[125px] items-center gap-5 px-5 py-5 lg:px-7">
+              <item.icon className="size-14 shrink-0 stroke-[1.7] text-[#18a936]" aria-hidden="true" />
+              <div>
+                <h2 className="text-xl font-bold">{item.title}</h2>
+                <p className="mt-2 max-w-[240px] text-sm leading-6 text-white/70">{item.text}</p>
               </div>
-              <h3 className="mt-4 text-base font-bold">{s.title}</h3>
-              <p className="mt-1.5 text-sm text-muted-foreground">{s.text}</p>
             </div>
           ))}
         </div>
-
-        <div className="mt-8 rounded-lg border border-border bg-surface p-5 text-sm text-muted-foreground">
-          Não é necessário criar senha. Guarde o número de protocolo gerado no envio: com ele e o
-          CPF/CNPJ você acompanha o andamento da análise.
-        </div>
-      </main>
+      </section>
 
       <PublicFooter />
     </div>

@@ -1,15 +1,39 @@
 import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { LayoutDashboard, Plug, ArrowUpRight, LogOut } from "lucide-react";
+import { LayoutDashboard, Plug, ArrowUpRight, LogOut, UsersRound } from "lucide-react";
 import { GrfLogo } from "@/components/grf/chrome";
 import { supabase } from "@/integrations/supabase/client";
+
+const ACCESS_APPROVERS = new Set([
+  "roberta.souza@grfdistribuicao.com.br",
+  "roteirizador.transporte@grfdistribuicao.com.br",
+  "deivede.lima@grfdistribuicao.com.br",
+]);
 
 export const Route = createFileRoute("/admin")({
   ssr: false,
   beforeLoad: async () => {
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) throw redirect({ to: "/login" });
-    return { grfUser: data.user };
+
+    const { data: role } = await (supabase as any)
+      .from("user_roles")
+      .select("role, must_change_password")
+      .eq("user_id", data.user.id)
+      .in("role", ["admin", "analista"])
+      .maybeSingle();
+
+    if (!role) {
+      await supabase.auth.signOut();
+      throw redirect({ to: "/login" });
+    }
+    if (role.must_change_password) throw redirect({ to: "/alterar-senha" });
+
+    return {
+      grfUser: data.user,
+      grfRole: role.role as "admin" | "analista",
+      isAccessApprover: ACCESS_APPROVERS.has((data.user.email ?? "").toLowerCase()),
+    };
   },
   head: () => ({
     meta: [
@@ -30,7 +54,7 @@ export const Route = createFileRoute("/admin")({
 function AdminLayout() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { grfUser } = Route.useRouteContext();
+  const { grfUser, isAccessApprover } = Route.useRouteContext();
 
   async function signOut() {
     await queryClient.cancelQueries();
@@ -60,6 +84,15 @@ function AdminLayout() {
             >
               <LayoutDashboard className="size-4" /> Cadastros de veículos
             </Link>
+            {isAccessApprover && (
+              <Link
+                to="/admin/acessos"
+                activeProps={{ className: "bg-white/15" }}
+                className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 hover:bg-white/10"
+              >
+                <UsersRound className="size-4" /> Acessos
+              </Link>
+            )}
             <Link
               to="/admin/sankhya"
               activeProps={{ className: "bg-white/15" }}

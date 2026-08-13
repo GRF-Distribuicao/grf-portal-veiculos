@@ -69,7 +69,6 @@
   --color-graphite: var(--graphite);
 }
 
-
 :root {
   --radius: 0.5rem;
   /* Identidade GRF: grafite #535354, verde #00C515, branco */
@@ -116,8 +115,6 @@
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Barlow", ui-sans-serif, system-ui, sans-serif;
 }
-
-
 
 .dark {
   --background: oklch(0.129 0.042 264.695);
@@ -174,4 +171,9 @@
 @utility grf-hero {
   background: linear-gradient(135deg, oklch(0.36 0.002 285) 0%, oklch(0.47 0.002 285) 60%, oklch(0.42 0.03 143) 100%);
   color: var(--sidebar-foreground);
+}
+
+/* Na consulta publica, nao exibimos transportadora nem operacao/ponto de apoio. */
+.grf-topbar + main.max-w-2xl .border-primary\/30 .grid > :nth-child(n + 5) {
+  display: none;
 }

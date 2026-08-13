@@ -28,7 +28,9 @@ export function SankhyaPlateLookup({ value, onChange, onFound }: {
   const [result, setResult] = useState<SankhyaVehicleReference | null>(null);
   const [checkedPlate, setCheckedPlate] = useState<string | null>(null);
   const requestRef = useRef(0);
+  const lookupRef = useRef(lookup);
   const onFoundRef = useRef(onFound);
+  lookupRef.current = lookup;
   onFoundRef.current = onFound;
 
   useEffect(() => {
@@ -46,7 +48,7 @@ export function SankhyaPlateLookup({ value, onChange, onFound }: {
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
-          const response = await lookup({ data: { plate } });
+          const response = await lookupRef.current({ data: { plate } });
           if (requestRef.current !== requestId) return;
           setCheckedPlate(plate);
           if (response.found) {
@@ -60,7 +62,7 @@ export function SankhyaPlateLookup({ value, onChange, onFound }: {
     }, 250);
 
     return () => window.clearTimeout(timer);
-  }, [lookup, value]);
+  }, [value]);
 
   return (
     <div className="space-y-3 sm:col-span-2">

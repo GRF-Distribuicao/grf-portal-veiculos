@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { LayoutDashboard, Plug, ArrowUpRight, LogOut, UsersRound } from "lucide-react";
+import { LayoutDashboard, Plug, ArrowUpRight, LogOut, UsersRound, Database } from "lucide-react";
 import { GrfLogo } from "@/components/grf/chrome";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -83,6 +83,13 @@ function AdminLayout() {
               className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 hover:bg-white/10"
             >
               <LayoutDashboard className="size-4" /> Cadastros de veículos
+            </Link>
+            <Link
+              to="/admin/veiculos"
+              activeProps={{ className: "bg-white/15" }}
+              className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 hover:bg-white/10"
+            >
+              <Database className="size-4" /> Base de veículos
             </Link>
             {isAccessApprover && (
               <Link

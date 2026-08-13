@@ -7,11 +7,6 @@ import { lookupSankhyaVehicle } from "@/lib/grf-vehicle-catalog.functions";
 
 export type SankhyaVehicleReference = {
   plate: string;
-  fleetStatus: string | null;
-  operation: string | null;
-  supportPoint: string | null;
-  transporterName: string | null;
-  driverName: string | null;
   model: string | null;
   capacityKg: number | null;
   pallets: number | null;
@@ -21,7 +16,7 @@ export type SankhyaVehicleReference = {
 export function SankhyaPlateLookup({ value, onChange, onFound }: {
   value: string;
   onChange: (plate: string) => void;
-  onFound: (vehicle: SankhyaVehicleReference) => void;
+  onFound?: (vehicle: SankhyaVehicleReference) => void;
 }) {
   const lookup = useServerFn(lookupSankhyaVehicle);
   const [loading, setLoading] = useState(false);
@@ -52,8 +47,15 @@ export function SankhyaPlateLookup({ value, onChange, onFound }: {
           if (requestRef.current !== requestId) return;
           setCheckedPlate(plate);
           if (response.found) {
-            setResult(response.vehicle);
-            onFoundRef.current(response.vehicle);
+            const vehicle = {
+              plate: response.vehicle.plate,
+              model: response.vehicle.model,
+              capacityKg: response.vehicle.capacityKg,
+              pallets: response.vehicle.pallets,
+              fleetVehicleType: response.vehicle.fleetVehicleType,
+            };
+            setResult(vehicle);
+            onFoundRef.current?.(vehicle);
           }
         } finally {
           if (requestRef.current === requestId) setLoading(false);
@@ -65,7 +67,7 @@ export function SankhyaPlateLookup({ value, onChange, onFound }: {
   }, [value]);
 
   return (
-    <div className="space-y-3 sm:col-span-2">
+    <div className="space-y-3">
       <div className="relative max-w-sm">
         <Input
           value={prettyPlate(value)}
@@ -77,25 +79,15 @@ export function SankhyaPlateLookup({ value, onChange, onFound }: {
       </div>
 
       {result && (
-        <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
-          <div className="flex items-start gap-3">
-            <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold">Veículo localizado na base Sankhya</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Informações conhecidas foram carregadas como referência. Confira e complete o que faltar.
-              </p>
-              <div className="mt-3 grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
-                <Reference label="Modelo" value={result.model} />
-                <Reference label="Classificação" value={result.fleetVehicleType} />
-                <Reference label="Capacidade" value={result.capacityKg == null ? null : `${result.capacityKg.toLocaleString("pt-BR")} kg`} />
-                <Reference label="Pallets" value={result.pallets == null ? null : String(result.pallets)} />
-                <Reference label="Transportadora" value={result.transporterName} />
-                <Reference label="Motorista de referência" value={result.driverName} />
-                <Reference label="Ponto de apoio" value={result.supportPoint} />
-                <Reference label="Operação" value={result.operation} />
-              </div>
-            </div>
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+          <p className="flex items-center gap-1.5 text-xs font-bold text-primary">
+            <CheckCircle2 className="size-4" /> Veículo localizado na base Sankhya
+          </p>
+          <div className="mt-2 grid gap-x-5 gap-y-1 text-xs sm:grid-cols-2">
+            <Reference label="Modelo" value={result.model} />
+            <Reference label="Classificação" value={result.fleetVehicleType} />
+            <Reference label="Capacidade" value={result.capacityKg == null ? null : `${result.capacityKg.toLocaleString("pt-BR")} kg`} />
+            <Reference label="Pallets" value={result.pallets == null ? null : String(result.pallets)} />
           </div>
         </div>
       )}

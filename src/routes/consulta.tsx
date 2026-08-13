@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Search, ArrowLeft, CheckCircle2, AlertCircle, Database } from "lucide-react";
+import { Search, ArrowLeft, CheckCircle2, AlertCircle, Database, ArrowRight } from "lucide-react";
 import { PublicHeader, PublicFooter } from "@/components/grf/chrome";
 import { Field } from "@/components/grf/field";
 import { StatusBadge } from "@/components/grf/status-badge";
@@ -28,8 +28,7 @@ export const Route = createFileRoute("/consulta")({
 
 type Result = Awaited<ReturnType<typeof trackRegistration>>;
 type PlateResult = Awaited<ReturnType<typeof checkPlate>>;
-type SankhyaResult = Awaited<ReturnType<typeof lookupSankhyaVehicle>>;
-
+type MasterResult = Awaited<ReturnType<typeof lookupSankhyaVehicle>>;
 type Mode = "protocol" | "plate";
 
 function Consulta() {
@@ -44,7 +43,7 @@ function Consulta() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [plateResult, setPlateResult] = useState<PlateResult | null>(null);
-  const [sankhyaResult, setSankhyaResult] = useState<SankhyaResult | null>(null);
+  const [masterResult, setMasterResult] = useState<MasterResult | null>(null);
 
   useEffect(() => {
     const requestedMode = new URLSearchParams(window.location.search).get("mode");
@@ -65,21 +64,21 @@ function Consulta() {
     e.preventDefault();
     setLoading(true);
     setPlateResult(null);
-    setSankhyaResult(null);
+    setMasterResult(null);
     try {
       const normalizedPlate = plate.replace(/[^A-Z0-9]/gi, "").toUpperCase();
-      const [portal, sankhya] = await Promise.all([
+      const [portal, master] = await Promise.all([
         verifyPlate({ data: { plate: normalizedPlate } }),
         lookupVehicle({ data: { plate: normalizedPlate } }),
       ]);
       setPlateResult(portal);
-      setSankhyaResult(sankhya);
+      setMasterResult(master);
     } finally {
       setLoading(false);
     }
   }
 
-  const technicalVehicle = sankhyaResult?.found ? sankhyaResult.vehicle : null;
+  const masterVehicle = masterResult?.found ? masterResult.vehicle : null;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -110,7 +109,7 @@ function Consulta() {
           <>
             <h1 className="mt-5 text-2xl font-bold">Consultar placa</h1>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              Consulte a placa para verificar o cadastro no Portal GRF e as informações técnicas já existentes na base Sankhya.
+              Consulte a placa para saber se o veículo já existe no cadastro mestre da GRF e quais informações ainda precisam ser completadas.
             </p>
 
             <form onSubmit={onPlateSubmit} className="mt-6 space-y-4 rounded-xl border border-border bg-card p-5 shadow-sm">
@@ -129,32 +128,66 @@ function Consulta() {
               </Button>
             </form>
 
-            {technicalVehicle && (
+            {masterVehicle && (
               <div className="mt-5 rounded-xl border border-primary/30 bg-primary/5 p-5 shadow-sm">
                 <div className="flex items-start gap-3">
                   <Database className="mt-0.5 size-5 shrink-0 text-primary" />
                   <div className="min-w-0 flex-1">
-                    <p className="font-bold">Veículo localizado na base Sankhya</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Encontramos informações técnicas já conhecidas para a placa <strong>{prettyPlate(technicalVehicle.plate)}</strong>.
-                    </p>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <VehicleInfo label="Modelo" value={technicalVehicle.model} />
-                      <VehicleInfo label="Classificação" value={technicalVehicle.fleetVehicleType} />
-                      <VehicleInfo
-                        label="Capacidade de carga"
-                        value={technicalVehicle.capacityKg == null ? null : `${technicalVehicle.capacityKg.toLocaleString("pt-BR")} kg`}
-                      />
-                      <VehicleInfo label="Quantidade de pallets" value={technicalVehicle.pallets == null ? null : String(technicalVehicle.pallets)} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-bold">Veículo encontrado</p>
+                      <span className="rounded-full border border-primary/30 bg-background/70 px-2.5 py-1 text-[10px] font-bold tracking-wide text-primary uppercase">
+                        Cadastro básico existente
+                      </span>
                     </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      A placa <strong>{prettyPlate(masterVehicle.plate)}</strong> já está no banco de dados da GRF
+                      {masterVehicle.sankhyaRegistered ? " e foi localizada no Sankhya" : ""}. Você não precisa começar do zero.
+                    </p>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <VehicleInfo label="Modelo" value={masterVehicle.model} />
+                      <VehicleInfo label="Tipo / classificação" value={masterVehicle.fleetVehicleType} />
+                      <VehicleInfo
+                        label="Lotação conhecida"
+                        value={masterVehicle.capacityKg == null ? null : `${masterVehicle.capacityKg.toLocaleString("pt-BR")} kg`}
+                      />
+                      <VehicleInfo label="Quantidade de pallets" value={masterVehicle.pallets == null ? null : String(masterVehicle.pallets)} />
+                      <VehicleInfo label="Transportadora" value={masterVehicle.transporterName} />
+                      <VehicleInfo label="Operação / ponto de apoio" value={[masterVehicle.operation, masterVehicle.supportPoint].filter(Boolean).join(" · ") || null} />
+                    </div>
+
+                    {masterVehicle.missingFields.length > 0 && (
+                      <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5">
+                        <strong>Cadastro ainda incompleto.</strong> O transportador deverá complementar: {masterVehicle.missingFields.join(", ")} e anexar os documentos/fotos exigidos.
+                      </div>
+                    )}
+
+                    {!plateResult?.exists && (
+                      <Button asChild className="mt-4">
+                        <a href={`/completar-cadastro?plate=${encodeURIComponent(masterVehicle.plate)}`}>
+                          Terminar cadastro <ArrowRight className="size-4" />
+                        </a>
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
             )}
 
-            {sankhyaResult && !sankhyaResult.found && (
-              <div className="mt-5 rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-                Esta placa não foi localizada na base de referência importada do Sankhya.
+            {masterResult && !masterResult.found && !plateResult?.exists && (
+              <div className="mt-5 rounded-xl border border-[#00c853]/30 bg-[#00c853]/10 p-5">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="mt-0.5 size-5 text-[#00a844]" />
+                  <div>
+                    <p className="font-bold">Placa nova no Portal GRF</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Não encontramos <strong>{prettyPlate(plate)}</strong> no cadastro mestre. Neste caso, o cadastro começa normalmente do zero.
+                    </p>
+                    <Button asChild className="mt-4">
+                      <Link to="/cadastro">Cadastrar veículo</Link>
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -163,9 +196,9 @@ function Consulta() {
                 <div className="flex items-start gap-3">
                   <AlertCircle className="mt-0.5 size-5 text-destructive" />
                   <div>
-                    <p className="font-bold">Veículo já possui cadastro no Portal GRF</p>
+                    <p className="font-bold">Este veículo já possui um cadastro enviado</p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      A placa <strong>{prettyPlate(plate)}</strong> já está registrada no Portal GRF.
+                      A placa <strong>{prettyPlate(plate)}</strong> já passou pela etapa de envio no Portal GRF.
                     </p>
                     {plateResult.protocol && (
                       <p className="mt-2 text-sm font-semibold">
@@ -173,23 +206,6 @@ function Consulta() {
                         {plateResult.status ? ` · ${STATUS_LABEL[plateResult.status] ?? plateResult.status}` : ""}
                       </p>
                     )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {plateResult && !plateResult.exists && (
-              <div className="mt-5 rounded-xl border border-[#00c853]/30 bg-[#00c853]/10 p-5">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="mt-0.5 size-5 text-[#00a844]" />
-                  <div>
-                    <p className="font-bold">Placa disponível para cadastro no Portal GRF</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Não encontramos um cadastro enviado para <strong>{prettyPlate(plate)}</strong> no Portal. Você pode iniciar ou completar o cadastro do veículo.
-                    </p>
-                    <Button asChild className="mt-4">
-                      <Link to="/cadastro">Cadastrar veículo</Link>
-                    </Button>
                   </div>
                 </div>
               </div>

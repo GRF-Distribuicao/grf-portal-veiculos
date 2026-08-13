@@ -16,7 +16,7 @@ export const lookupSankhyaVehicle = createServerFn({ method: "POST" })
     const { data: row, error } = await db
       .from("vehicles")
       .select(
-        "plate, source, sankhya_registered, completion_status, fleet_status, operation, support_point, transporter_name, driver_name, brand_model, vehicle_type, body_type, pbt_kg, tare_kg, lotacao_kg, max_capacity_kg, pallets, renavam, chassis, rntrc, body_width_m, body_height_m, body_length_m, has_tracker, tracker_provider, tracker_identifier, tracker_status",
+        "plate, source, sankhya_registered, completion_status, fleet_status, operation, support_point, transporter_name, driver_name, brand_model, vehicle_type, body_type, pbt_kg, tare_kg, lotacao_kg, max_capacity_kg, pallets, renavam, chassis, rntrc, body_width_m, body_height_m, body_length_m, has_tracker, tracker_provider, tracker_identifier, tracker_status, grf_sticker, has_monitoring_camera",
       )
       .eq("plate", plate)
       .maybeSingle();
@@ -36,6 +36,8 @@ export const lookupSankhyaVehicle = createServerFn({ method: "POST" })
     if (row.body_height_m == null) missingFields.push("Altura da carroceria");
     if (row.body_length_m == null) missingFields.push("Comprimento da carroceria");
     if (row.has_tracker == null) missingFields.push("Rastreamento");
+    if (row.grf_sticker == null) missingFields.push("Adesivo GRF");
+    if (row.has_monitoring_camera == null) missingFields.push("Câmera de monitoramento");
 
     return {
       found: true as const,
@@ -71,6 +73,9 @@ export const lookupSankhyaVehicle = createServerFn({ method: "POST" })
         trackerProvider: (row.tracker_provider as string | null) ?? null,
         trackerIdentifier: (row.tracker_identifier as string | null) ?? null,
         trackerStatus: (row.tracker_status as string | null) ?? null,
+        grfSticker: row.grf_sticker == null ? null : Boolean(row.grf_sticker),
+        hasMonitoringCamera:
+          row.has_monitoring_camera == null ? null : Boolean(row.has_monitoring_camera),
         missingFields,
       },
     };

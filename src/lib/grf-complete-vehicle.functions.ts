@@ -31,8 +31,8 @@ const completeVehicleSchema = z.object({
     tollTagNumber: z.string().optional().nullable(),
     tollTagCompany: z.string().optional().nullable(),
     tollTagOwned: z.boolean(),
-    grfSticker: z.boolean(),
-    hasMonitoringCamera: z.boolean(),
+    grfSticker: z.boolean().optional().default(false),
+    hasMonitoringCamera: z.boolean().optional().default(false),
   }),
   driver: z.object({
     name: z.string().min(3),

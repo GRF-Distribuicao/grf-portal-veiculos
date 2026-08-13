@@ -16,7 +16,7 @@ export const Route = createFileRoute("/iniciar-cadastro")({
       { title: "Iniciar cadastro – Portal GRF" },
       {
         name: "description",
-        content: "Informe primeiro a placa para aproveitar os dados que a GRF ja possui do veiculo.",
+        content: "Informe primeiro a placa para aproveitar os dados que a GRF já possui do veículo.",
       },
     ],
   }),
@@ -52,7 +52,7 @@ function IniciarCadastro() {
     setMasterResult(null);
 
     if (!isValidPlate(normalized)) {
-      setError("Informe uma placa valida no padrao ABC1234 ou ABC1D23.");
+      setError("Informe uma placa válida no padrão ABC1234 ou ABC1D23.");
       return;
     }
 
@@ -66,7 +66,7 @@ function IniciarCadastro() {
       setPlateResult(portal);
       setMasterResult(master);
     } catch {
-      setError("Nao foi possivel consultar a placa. Tente novamente.");
+      setError("Não foi possível consultar a placa. Tente novamente.");
     } finally {
       setLoading(false);
     }
@@ -84,7 +84,7 @@ function IniciarCadastro() {
       }
       window.location.assign(`/completar-cadastro?plate=${encodeURIComponent(normalized)}`);
     } catch {
-      setError("Nao foi possivel preparar o cadastro. Tente novamente.");
+      setError("Não foi possível preparar o cadastro. Tente novamente.");
     } finally {
       setContinuing(false);
     }
@@ -102,14 +102,14 @@ function IniciarCadastro() {
 
         <div className="mt-5">
           <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Primeiro passo</p>
-          <h1 className="mt-1 text-2xl font-bold">Informe a placa do veiculo</h1>
+          <h1 className="mt-1 text-2xl font-bold">Informe a placa do veículo</h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Antes de pedir os dados do transportador, o Portal verifica se a GRF ja possui um cadastro basico desta placa.
+            Antes de pedir os dados do transportador, o Portal verifica se a GRF já possui um cadastro básico desta placa.
           </p>
         </div>
 
         <form onSubmit={searchPlate} className="mt-6 rounded-xl border border-border bg-card p-5 shadow-sm">
-          <label className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Placa do veiculo *</label>
+          <label className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Placa do veículo *</label>
           <div className="mt-2 flex gap-3 max-sm:flex-col">
             <Input
               value={prettyPlate(plate)}
@@ -131,9 +131,9 @@ function IniciarCadastro() {
             <div className="flex items-start gap-3">
               <AlertCircle className="mt-0.5 size-5 shrink-0 text-destructive" />
               <div>
-                <p className="font-bold">Este veiculo ja possui cadastro enviado</p>
+                <p className="font-bold">Este veículo já possui cadastro enviado</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  A placa <strong>{prettyPlate(plate)}</strong> ja passou pela etapa de envio no Portal GRF.
+                  A placa <strong>{prettyPlate(plate)}</strong> já passou pela etapa de envio no Portal GRF.
                 </p>
                 {plateResult.protocol && (
                   <p className="mt-2 text-sm font-semibold">
@@ -151,15 +151,15 @@ function IniciarCadastro() {
             <div className="flex items-start gap-3">
               <Database className="mt-0.5 size-5 shrink-0 text-primary" />
               <div className="min-w-0 flex-1">
-                <p className="font-bold">Veiculo encontrado — continue o cadastro</p>
+                <p className="font-bold">Veículo encontrado — continue o cadastro</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Ja temos informacoes basicas desta placa. O formulario seguinte sera preenchido automaticamente com o que estiver salvo.
+                  Já temos informações básicas desta placa. O formulário seguinte será preenchido automaticamente com o que estiver salvo.
                 </p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <Info label="Modelo" value={masterVehicle.model} />
-                  <Info label="Tipo / classificacao" value={masterVehicle.fleetVehicleType} />
+                  <Info label="Tipo / classificação" value={masterVehicle.fleetVehicleType} />
                   <Info
-                    label="Lotacao conhecida"
+                    label="Lotação conhecida"
                     value={masterVehicle.capacityKg == null ? null : `${masterVehicle.capacityKg.toLocaleString("pt-BR")} kg`}
                   />
                   <Info label="Pallets" value={masterVehicle.pallets == null ? null : String(masterVehicle.pallets)} />
@@ -180,7 +180,7 @@ function IniciarCadastro() {
               <div>
                 <p className="font-bold">Placa nova no cadastro mestre</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Nao encontramos dados anteriores para <strong>{prettyPlate(plate)}</strong>. A placa sera criada no banco e o transportador completa as informacoes normalmente.
+                  Não encontramos dados anteriores para <strong>{prettyPlate(plate)}</strong>. A placa será criada no banco e o transportador completa as informações normalmente.
                 </p>
                 <Button onClick={continueRegistration} disabled={continuing} className="mt-4">
                   {continuing ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
@@ -200,7 +200,7 @@ function Info({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="rounded-lg border border-border/70 bg-background/70 p-3">
       <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{label}</p>
-      <p className="mt-1 text-sm font-bold">{value && value !== "-" ? value : "Nao informado"}</p>
+      <p className="mt-1 text-sm font-bold">{value && value !== "-" ? value : "Não informado"}</p>
     </div>
   );
 }

@@ -31,6 +31,8 @@ const completeVehicleSchema = z.object({
     tollTagNumber: z.string().optional().nullable(),
     tollTagCompany: z.string().optional().nullable(),
     tollTagOwned: z.boolean(),
+    grfSticker: z.boolean(),
+    hasMonitoringCamera: z.boolean(),
   }),
   driver: z.object({
     name: z.string().min(3),
@@ -149,6 +151,8 @@ export const completeExistingVehicle = createServerFn({ method: "POST" })
         color: master.color,
         fuel: master.fuel,
         company_vehicle: master.company_vehicle ?? false,
+        grf_sticker: data.vehicle.grfSticker,
+        has_monitoring_camera: data.vehicle.hasMonitoringCamera,
         declaration_accepted: true,
       })
       .select("id, protocol")
@@ -222,6 +226,8 @@ export const completeExistingVehicle = createServerFn({ method: "POST" })
         tracker_provider: data.tracking.hasTracker ? data.tracking.provider || null : null,
         tracker_identifier: data.tracking.hasTracker ? data.tracking.identifier || null : null,
         tracker_status: data.tracking.hasTracker ? data.tracking.status || null : null,
+        grf_sticker: data.vehicle.grfSticker,
+        has_monitoring_camera: data.vehicle.hasMonitoringCamera,
         updated_at: new Date().toISOString(),
       })
       .eq("id", master.id);

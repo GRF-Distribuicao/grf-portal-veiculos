@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { LayoutDashboard, Plug, ArrowUpRight, LogOut, UsersRound, Database } from "lucide-react";
+import { LayoutDashboard, Plug, ArrowUpRight, LogOut, UsersRound, Database, CalendarCheck2 } from "lucide-react";
 import { GrfLogo } from "@/components/grf/chrome";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -90,6 +90,13 @@ function AdminLayout() {
               className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 hover:bg-white/10"
             >
               <Database className="size-4" /> Base de veículos
+            </Link>
+            <Link
+              to="/admin/disponibilidade"
+              activeProps={{ className: "bg-white/15" }}
+              className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 hover:bg-white/10"
+            >
+              <CalendarCheck2 className="size-4" /> Disponibilidade
             </Link>
             {isAccessApprover && (
               <Link

@@ -120,6 +120,7 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
           })
           .filter(Boolean) as Array<Vehicle & { available_from: string | null; availability_note: string | null }>;
 
+        const informed = availableVehicles.length > 0;
         const capacityKg = availableVehicles.reduce((sum, vehicle) => sum + (vehicle.lotacao_kg ?? 0), 0);
         const pallets = availableVehicles.reduce((sum, vehicle) => sum + (vehicle.pallets ?? 0), 0);
 
@@ -128,9 +129,9 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
           name: String(company.name),
           cnpj: company.cnpj ?? null,
           fleetCount: fleet.length,
-          informed: Boolean(submission),
-          revision: submission ? Number(submission.revision) : null,
-          submittedAt: submission?.submitted_at ?? null,
+          informed,
+          revision: informed && submission ? Number(submission.revision) : null,
+          submittedAt: informed ? submission?.submitted_at ?? null : null,
           availableCount: availableVehicles.length,
           capacityKg,
           pallets,

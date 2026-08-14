@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Check, Clock3, MailCheck, MailWarning, ShieldCheck, UserCheck, UserX } from "lucide-react";
+import { TransporterAccessRequests } from "@/components/grf/transporter-access-requests";
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/grf-domain";
 import {
@@ -204,6 +205,8 @@ function AccessRequestsPage() {
               )}
             </div>
           </section>
+
+          <TransporterAccessRequests />
         </>
       )}
     </main>

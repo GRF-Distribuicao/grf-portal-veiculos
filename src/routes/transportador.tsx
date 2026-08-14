@@ -1,12 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Building2, CalendarDays, CheckCircle2, Loader2, LogIn, LogOut, Save, Truck } from "lucide-react";
+import { Building2, CalendarDays, CheckCircle2, KeyRound, Loader2, LogIn, LogOut, Save, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { PublicFooter, PublicHeader } from "@/components/grf/chrome";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
+import { transporterSupabase as supabase } from "@/integrations/supabase/transporter-client";
 import { prettyPlate } from "@/lib/grf-domain";
 
 export const Route = createFileRoute("/transportador")({
@@ -60,6 +60,8 @@ function formatDate(value: string) {
 function TransporterArea() {
   const [loading, setLoading] = useState(true);
   const [loginBusy, setLoginBusy] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -211,6 +213,7 @@ function TransporterArea() {
     event.preventDefault();
     setLoginBusy(true);
     setAccessError(null);
+    setResetMessage(null);
     const { data, error } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
       password,
@@ -225,6 +228,31 @@ function TransporterArea() {
     setLoginBusy(false);
   }
 
+  async function handleForgotPassword() {
+    setAccessError(null);
+    setResetMessage(null);
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !normalizedEmail.includes("@")) {
+      setAccessError("Informe seu e-mail acima para receber o link de recuperação.");
+      return;
+    }
+
+    setResetBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo: `${window.location.origin}/transportador/redefinir-senha`,
+    });
+    setResetBusy(false);
+
+    if (error) {
+      setAccessError("Não foi possível enviar o link de recuperação agora. Tente novamente em alguns minutos.");
+      return;
+    }
+
+    setResetMessage(
+      "Se o e-mail estiver cadastrado, você receberá um link para criar uma nova senha sem precisar falar com a GRF.",
+    );
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
     setUserId(null);
@@ -235,6 +263,7 @@ function TransporterArea() {
     setHistory([]);
     setPassword("");
     setAccessError(null);
+    setResetMessage(null);
   }
 
   function toggleVehicle(id: string) {
@@ -305,7 +334,19 @@ function TransporterArea() {
                 <Label>Senha</Label>
                 <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
               </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => void handleForgotPassword()}
+                  disabled={resetBusy}
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:underline disabled:opacity-50"
+                >
+                  {resetBusy ? <Loader2 className="size-3.5 animate-spin" /> : <KeyRound className="size-3.5" />}
+                  Esqueci minha senha
+                </button>
+              </div>
               {accessError && <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{accessError}</p>}
+              {resetMessage && <p className="rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm text-blue-800">{resetMessage}</p>}
               <Button type="submit" className="w-full bg-blue-600 text-white hover:bg-blue-700" disabled={loginBusy}>
                 {loginBusy ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4" />}
                 Entrar

@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { LockKeyhole, Search } from "lucide-react";
+import { LockKeyhole, Search, Truck } from "lucide-react";
 
 export function GrfLogo({
   compact = false,
@@ -43,6 +43,13 @@ export function PublicHeader() {
           >
             <Search className="size-6 sm:size-7 max-[420px]:size-[19px]" aria-hidden="true" />
             <span className="whitespace-nowrap max-[420px]:text-[12px]">Consultar protocolo</span>
+          </Link>
+          <Link
+            to="/transportador"
+            className="flex items-center gap-3 rounded-lg bg-[#2563eb] px-5 py-3.5 text-white shadow-lg transition-colors hover:bg-[#1d4ed8] sm:px-6 sm:py-4 max-[420px]:gap-1 max-[420px]:px-2.5 max-[420px]:py-2.5"
+          >
+            <Truck className="size-6 max-[420px]:size-[18px]" aria-hidden="true" />
+            <span className="whitespace-nowrap max-[420px]:text-[12px]">Área Transportador</span>
           </Link>
           <Link
             to="/admin"

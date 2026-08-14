@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Building2, CalendarDays, CheckCircle2, KeyRound, Loader2, LogIn, LogOut, Save, Truck } from "lucide-react";
+import { Building2, CalendarDays, CheckCircle2, KeyRound, Loader2, LogIn, LogOut, Save, Truck, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { PublicFooter, PublicHeader } from "@/components/grf/chrome";
 import { Button } from "@/components/ui/button";
@@ -93,6 +93,26 @@ function TransporterArea() {
     setAccessError(null);
     const db = supabase as any;
 
+    // A Área GRF e a Área do Transportador usam sessões separadas. Além disso,
+    // um usuário com papel interno GRF nunca é aceito como transportador.
+    const { data: grfRole } = await db
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", uid)
+      .maybeSingle();
+
+    if (grfRole) {
+      await supabase.auth.signOut();
+      setUserId(null);
+      setCompanyId(null);
+      setCompanyName("");
+      setVehicles([]);
+      setSelected(new Set());
+      setHistory([]);
+      setAccessError("Este usuário pertence à Área GRF. Entre aqui somente com um acesso de transportadora.");
+      return;
+    }
+
     const { data: membership, error: membershipError } = await db
       .from("transporter_memberships")
       .select("transporter_company_id, role")
@@ -101,14 +121,27 @@ function TransporterArea() {
       .maybeSingle();
 
     if (membershipError || !membership) {
+      const { data: request } = await db
+        .from("transporter_access_requests")
+        .select("status, company_name, requested_at")
+        .eq("user_id", uid)
+        .order("requested_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
       setCompanyId(null);
       setCompanyName("");
       setVehicles([]);
       setSelected(new Set());
       setHistory([]);
-      setAccessError(
-        "Seu usuário está autenticado, mas ainda não foi vinculado a uma transportadora pela GRF.",
-      );
+
+      if (request?.status === "PENDING") {
+        setAccessError(`Sua solicitação para ${request.company_name} está aguardando aprovação da GRF.`);
+      } else if (request?.status === "REJECTED") {
+        setAccessError("Sua solicitação de acesso não foi aprovada. Faça uma nova solicitação com os dados corretos da empresa.");
+      } else {
+        setAccessError("Seu usuário está autenticado, mas ainda não foi vinculado a uma transportadora pela GRF.");
+      }
       return;
     }
 
@@ -352,9 +385,17 @@ function TransporterArea() {
                 Entrar
               </Button>
             </form>
-            <p className="mt-5 border-t border-border pt-5 text-xs leading-5 text-muted-foreground">
-              O acesso é liberado pela GRF e fica vinculado a uma única transportadora. Esse vínculo determina quais veículos podem ser visualizados.
-            </p>
+
+            <div className="mt-5 border-t border-border pt-5">
+              <Button asChild variant="outline" className="w-full border-blue-500/30 text-blue-700 hover:bg-blue-500/5 hover:text-blue-800">
+                <Link to="/transportador/solicitar-acesso">
+                  <UserPlus className="size-4" /> Solicitar acesso
+                </Link>
+              </Button>
+              <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                O acesso é aprovado pela GRF e vinculado a uma única transportadora. Esse vínculo determina quais veículos podem ser visualizados.
+              </p>
+            </div>
           </div>
           <Link to="/" className="mt-6 text-center text-sm text-muted-foreground hover:text-foreground">Voltar ao portal</Link>
         </main>
@@ -369,9 +410,14 @@ function TransporterArea() {
         <PublicHeader />
         <main className="mx-auto w-full max-w-xl flex-1 px-4 py-14">
           <div className="rounded-xl border border-warning/40 bg-warning/10 p-6">
-            <h1 className="text-xl font-bold">Acesso ainda sem transportadora vinculada</h1>
+            <h1 className="text-xl font-bold">Acesso ainda não liberado</h1>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">{accessError}</p>
-            <Button variant="outline" className="mt-5" onClick={() => void signOut()}><LogOut className="size-4" /> Sair</Button>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => void signOut()}><LogOut className="size-4" /> Sair</Button>
+              <Button asChild className="bg-blue-600 text-white hover:bg-blue-700">
+                <Link to="/transportador/solicitar-acesso"><UserPlus className="size-4" /> Nova solicitação</Link>
+              </Button>
+            </div>
           </div>
         </main>
         <PublicFooter />

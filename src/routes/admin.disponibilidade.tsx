@@ -74,6 +74,10 @@ function formatTime(value: string | null) {
   return new Date(value).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
+function formatTons(valueKg: number) {
+  return `${(valueKg / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} t`;
+}
+
 function RoutingAvailabilityPage() {
   const list = useServerFn(listRoutingAvailability);
   const [date, setDate] = useState(localDateISO());
@@ -138,7 +142,7 @@ function RoutingAvailabilityPage() {
       <section className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard icon={Truck} label="Veículos disponíveis" value={String(totals.availableVehicles)} detail={`em ${formatDate(date)}`} />
         <MetricCard icon={Building2} label="Transportadoras responderam" value={`${totals.informedCompanies}/${totals.companies}`} detail="com frota vinculada" />
-        <MetricCard icon={Weight} label="Capacidade disponível" value={`${(totals.capacityKg / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} t`} detail="soma das lotações conhecidas" />
+        <MetricCard icon={Weight} label="Capacidade disponível" value={formatTons(totals.capacityKg)} detail="soma das lotações conhecidas" />
         <MetricCard icon={Package} label="Pallets disponíveis" value={totals.pallets.toLocaleString("pt-BR")} detail="capacidade cadastrada" />
       </section>
 
@@ -194,6 +198,9 @@ function RoutingAvailabilityPage() {
                       <div>
                         <p className="font-display text-2xl font-extrabold text-primary">{company.availableCount}</p>
                         <p className="text-xs text-muted-foreground">veículo(s) disponível(is)</p>
+                        <p className="mt-2 text-xs font-semibold text-foreground">
+                          Capacidade: {formatTons(company.capacityKg)}
+                        </p>
                       </div>
                       <div className="text-right text-xs text-muted-foreground">
                         {company.informed ? (

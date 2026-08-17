@@ -3,11 +3,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BODY_TYPES, CNH_CATEGORIES, LINK_TYPES, TRACKER_STATUS, UFS, formatDoc, formatPhone, prettyPlate } from "@/lib/grf-domain";
+import {
+  BODY_TYPES,
+  CNH_CATEGORIES,
+  FUELS,
+  LINK_TYPES,
+  SPECIES,
+  TRACKER_STATUS,
+  UFS,
+  VEHICLE_TYPES,
+  WHEEL_TYPES,
+  formatDoc,
+  formatPhone,
+  prettyPlate,
+} from "@/lib/grf-domain";
 
 export const completionEmpty = {
   plate: "", transporterName: "", docNumber: "", phone: "", email: "", city: "", uf: "", linkType: "",
-  brandModel: "", bodyType: "", pbtKg: "", tareKg: "", lotacaoKg: "", pallets: "", renavam: "", chassis: "", rntrc: "",
+  brandModel: "", vehicleType: "", species: "", wheelType: "", bodyType: "", manufactureYear: "", modelYear: "",
+  pbtKg: "", tareKg: "", lotacaoKg: "", pallets: "", axles: "", renavam: "", chassis: "", engineNumber: "",
+  plateCity: "", plateUf: "", color: "", fuel: "", rntrc: "",
   bodyWidthM: "", bodyHeightM: "", bodyLengthM: "", tollTagNumber: "", tollTagCompany: "", tollTagOwned: "nao",
   driverName: "", driverCpf: "", driverCnh: "", driverCategory: "", driverPhone: "",
   hasTracker: "nao", trackerProvider: "", trackerId: "", trackerStatus: "", grfSticker: "nao", hasMonitoringCamera: "nao",
@@ -16,7 +31,19 @@ export const completionEmpty = {
 export type CompletionFormState = typeof completionEmpty;
 export type SetCompletionField = (key: keyof CompletionFormState, value: string) => void;
 
-export function CompletionSections({ form, set, errors }: { form: CompletionFormState; set: SetCompletionField; errors: Record<string, string> }) {
+export function CompletionSections({
+  form,
+  set,
+  errors,
+  showApprovalFields = false,
+}: {
+  form: CompletionFormState;
+  set: SetCompletionField;
+  errors: Record<string, string>;
+  showApprovalFields?: boolean;
+}) {
+  const companyVehicle = form.linkType === "Frota própria";
+
   return (
     <>
       <Section title="Responsável / transportador">
@@ -28,6 +55,13 @@ export function CompletionSections({ form, set, errors }: { form: CompletionForm
           <Field label="Cidade" required error={errors.city}><Input value={form.city} onChange={(e) => set("city", e.target.value)} /></Field>
           <Field label="UF" required error={errors.uf}><SelectBox value={form.uf} onChange={(v) => set("uf", v)} options={UFS} placeholder="UF" /></Field>
           <Field label="Tipo de vínculo" required error={errors.linkType}><SelectBox value={form.linkType} onChange={(v) => set("linkType", v)} options={LINK_TYPES} placeholder="Selecione" /></Field>
+          {showApprovalFields && (
+            <div className="rounded-lg border border-border bg-surface px-3 py-2.5">
+              <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Veículo da empresa</p>
+              <p className="mt-1 text-sm font-bold">{companyVehicle ? "Sim" : "Não"}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">Definido automaticamente pelo tipo de vínculo.</p>
+            </div>
+          )}
         </div>
       </Section>
 
@@ -35,6 +69,16 @@ export function CompletionSections({ form, set, errors }: { form: CompletionForm
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Placa"><Input value={prettyPlate(form.plate)} readOnly className="font-display font-bold tracking-widest" /></Field>
           <Field label="Marca / modelo" required error={errors.brandModel} className="lg:col-span-2"><Input value={form.brandModel} onChange={(e) => set("brandModel", e.target.value)} /></Field>
+
+          {showApprovalFields && <>
+            <Field label="Tipo de veículo"><SelectBox value={form.vehicleType} onChange={(v) => set("vehicleType", v)} options={VEHICLE_TYPES} placeholder="Selecione" /></Field>
+            <Field label="Espécie / tipo"><SelectBox value={form.species} onChange={(v) => set("species", v)} options={SPECIES} placeholder="Selecione" /></Field>
+            <Field label="Tipo de rodado"><SelectBox value={form.wheelType} onChange={(v) => set("wheelType", v)} options={WHEEL_TYPES} placeholder="Selecione" /></Field>
+            <Field label="Ano de fabricação"><Input inputMode="numeric" value={form.manufactureYear} onChange={(e) => set("manufactureYear", e.target.value.replace(/\D/g, "").slice(0, 4))} /></Field>
+            <Field label="Ano modelo"><Input inputMode="numeric" value={form.modelYear} onChange={(e) => set("modelYear", e.target.value.replace(/\D/g, "").slice(0, 4))} /></Field>
+            <Field label="Número de eixos"><Input inputMode="numeric" value={form.axles} onChange={(e) => set("axles", e.target.value.replace(/\D/g, ""))} /></Field>
+          </>}
+
           <Field label="PBT (kg)" required error={errors.pbtKg}><Input inputMode="decimal" value={form.pbtKg} onChange={(e) => set("pbtKg", e.target.value.replace(/[^0-9,.]/g, ""))} /></Field>
           <Field label="TARA (kg)" required error={errors.tareKg}><Input inputMode="decimal" value={form.tareKg} onChange={(e) => set("tareKg", e.target.value.replace(/[^0-9,.]/g, ""))} /></Field>
           <Field label="LOTAÇÃO (kg)" required error={errors.lotacaoKg}><Input inputMode="decimal" value={form.lotacaoKg} onChange={(e) => set("lotacaoKg", e.target.value.replace(/[^0-9,.]/g, ""))} /></Field>
@@ -43,6 +87,14 @@ export function CompletionSections({ form, set, errors }: { form: CompletionForm
           <Field label="ANTT / RNTRC" required error={errors.rntrc}><Input value={form.rntrc} onChange={(e) => set("rntrc", e.target.value.toUpperCase())} /></Field>
           <Field label="RENAVAM" required error={errors.renavam}><Input value={form.renavam} onChange={(e) => set("renavam", e.target.value.replace(/\D/g, "").slice(0, 11))} /></Field>
           <Field label="Chassi" required error={errors.chassis} className="sm:col-span-2"><Input value={form.chassis} onChange={(e) => set("chassis", e.target.value.toUpperCase().slice(0, 17))} /></Field>
+
+          {showApprovalFields && <>
+            <Field label="Número do motor"><Input value={form.engineNumber} onChange={(e) => set("engineNumber", e.target.value.toUpperCase())} /></Field>
+            <Field label="Cidade de emplacamento"><Input value={form.plateCity} onChange={(e) => set("plateCity", e.target.value)} /></Field>
+            <Field label="UF de emplacamento"><SelectBox value={form.plateUf} onChange={(v) => set("plateUf", v)} options={UFS} placeholder="UF" /></Field>
+            <Field label="Cor"><Input value={form.color} onChange={(e) => set("color", e.target.value)} /></Field>
+            <Field label="Combustível"><SelectBox value={form.fuel} onChange={(v) => set("fuel", v)} options={FUELS} placeholder="Selecione" /></Field>
+          </>}
         </div>
         <div className="mt-6 border-t border-border pt-5">
           <h3 className="text-sm font-bold">Dimensões da carroceria</h3>

@@ -104,13 +104,24 @@ function TransporterCorrectionPage() {
         uf: text(transporter.uf),
         linkType: text(transporter.link_type),
         brandModel: text(reg.brand_model || master.brand_model),
+        vehicleType: text(reg.vehicle_type || master.vehicle_type),
+        species: text(reg.species || master.species),
+        wheelType: text(reg.wheel_type || master.wheel_type),
         bodyType: text(reg.body_type || master.body_type),
+        manufactureYear: text(reg.manufacture_year ?? master.manufacture_year),
+        modelYear: text(reg.model_year ?? master.model_year),
         pbtKg: text(reg.max_weight_kg ?? master.pbt_kg),
         tareKg: text(reg.tare_kg ?? master.tare_kg),
         lotacaoKg: text(reg.max_capacity_kg ?? master.lotacao_kg),
         pallets: text(reg.pallets ?? master.pallets),
+        axles: text(reg.axles ?? master.axles),
         renavam: text(reg.renavam || master.renavam),
         chassis: text(reg.chassis || master.chassis),
+        engineNumber: text(reg.engine_number || master.engine_number),
+        plateCity: text(reg.plate_city || master.plate_city),
+        plateUf: text(reg.plate_uf || master.plate_uf),
+        color: text(reg.color || master.color),
+        fuel: text(reg.fuel || master.fuel),
         rntrc: text(master.rntrc),
         bodyWidthM: text(master.body_width_m),
         bodyHeightM: text(master.body_height_m),
@@ -269,13 +280,24 @@ function TransporterCorrectionPage() {
           vehicle: {
             plate: form.plate,
             brandModel: form.brandModel.trim(),
+            vehicleType: form.vehicleType || null,
+            species: form.species || null,
+            wheelType: form.wheelType || null,
             bodyType: form.bodyType || null,
+            manufactureYear: num(form.manufactureYear),
+            modelYear: num(form.modelYear),
             pbtKg: num(form.pbtKg)!,
             tareKg: num(form.tareKg)!,
             lotacaoKg: num(form.lotacaoKg)!,
             pallets: Math.trunc(num(form.pallets)!),
+            axles: num(form.axles) == null ? null : Math.trunc(num(form.axles)!),
             renavam: form.renavam.trim(),
             chassis: form.chassis.trim().toUpperCase(),
+            engineNumber: form.engineNumber.trim() || null,
+            plateCity: form.plateCity.trim() || null,
+            plateUf: form.plateUf || null,
+            color: form.color.trim() || null,
+            fuel: form.fuel || null,
             rntrc: form.rntrc.trim(),
             bodyWidthM: num(form.bodyWidthM)!,
             bodyHeightM: num(form.bodyHeightM)!,
@@ -377,7 +399,7 @@ function TransporterCorrectionPage() {
               </div>
             </section>
 
-            <CompletionSections form={form} set={set} errors={errors} />
+            <CompletionSections form={form} set={set} errors={errors} showApprovalFields />
             <CompletionAttachments docs={docs} errors={errors} onPick={(att, file) => void handleFile(att, file)} onRemove={dropDoc} />
 
             <section className={errors.declaration ? "rounded-xl border border-destructive/60 bg-destructive/5 p-5" : "rounded-xl border border-border bg-card p-5"}>

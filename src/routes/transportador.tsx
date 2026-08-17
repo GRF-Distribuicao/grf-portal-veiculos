@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Building2, CalendarDays, CheckCircle2, KeyRound, Loader2, LogIn, LogOut, Save, Truck, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { PublicFooter, PublicHeader } from "@/components/grf/chrome";
+import { TransporterCorrectionsPanel } from "@/components/grf/transporter-corrections-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -442,6 +443,8 @@ function TransporterArea() {
       </header>
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8">
+        <TransporterCorrectionsPanel />
+
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground"><CalendarDays className="size-4" /> Disponibilidade de {formatDate(today)}</div>

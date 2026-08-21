@@ -14,6 +14,15 @@ type BrasilApiCompany = {
   descricao_situacao_cadastral?: string | null;
 };
 
+function formatCnpj(value: string) {
+  const raw = onlyDigits(value).slice(0, 14);
+  return raw
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1/$2")
+    .replace(/(\d{4})(\d)/, "$1-$2");
+}
+
 export const lookupTransporterCnpj = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => lookupSchema.parse(input))
   .handler(async ({ data }) => {
@@ -25,12 +34,25 @@ export const lookupTransporterCnpj = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
 
-    const { data: existingCompany } = await db
-      .from("transporter_companies")
-      .select("name, cnpj, active")
-      .eq("cnpj", cnpj)
-      .eq("active", true)
-      .maybeSingle();
+    const [{ data: existingCompany }, { data: savedTransporters }] = await Promise.all([
+      db
+        .from("transporter_companies")
+        .select("name, cnpj, active")
+        .eq("cnpj", cnpj)
+        .eq("active", true)
+        .maybeSingle(),
+      db
+        .from("transporters")
+        .select("name, doc_number, phone, email, city, uf, link_type, created_at")
+        .eq("doc_type", "CNPJ")
+        .in("doc_number", [cnpj, formatCnpj(cnpj)])
+        .order("created_at", { ascending: false })
+        .limit(1),
+    ]);
+
+    const savedTransporter = Array.isArray(savedTransporters) && savedTransporters.length
+      ? savedTransporters[0]
+      : null;
 
     let publicCompany: BrasilApiCompany | null = null;
     let publicLookupUnavailable = false;
@@ -50,28 +72,39 @@ export const lookupTransporterCnpj = createServerFn({ method: "POST" })
       publicLookupUnavailable = true;
     }
 
-    if (!existingCompany && !publicCompany) {
+    if (!existingCompany && !savedTransporter && !publicCompany) {
       return {
         ok: false as const,
         error: publicLookupUnavailable
-          ? "A consulta pública do CNPJ está temporariamente indisponível. Preencha a razão social manualmente para continuar."
-          : "CNPJ não encontrado na consulta pública.",
-        allowManual: publicLookupUnavailable,
+          ? "A consulta do CNPJ está temporariamente indisponível. Preencha os dados manualmente para continuar."
+          : "CNPJ não encontrado no cadastro do Portal nem na consulta pública.",
+        allowManual: true,
       };
     }
 
     const officialName = publicCompany?.razao_social?.trim() || null;
-    const companyName = String(existingCompany?.name ?? officialName ?? "").trim();
+    const companyName = String(existingCompany?.name ?? savedTransporter?.name ?? officialName ?? "").trim();
 
     return {
       ok: true as const,
       companyName,
       officialName,
       tradeName: publicCompany?.nome_fantasia?.trim() || null,
-      city: publicCompany?.municipio?.trim() || null,
-      uf: publicCompany?.uf?.trim() || null,
+      city: savedTransporter?.city?.trim() || publicCompany?.municipio?.trim() || null,
+      uf: savedTransporter?.uf?.trim() || publicCompany?.uf?.trim() || null,
       cadastralStatus: publicCompany?.descricao_situacao_cadastral?.trim() || null,
-      knownToPortal: Boolean(existingCompany),
+      knownToPortal: Boolean(existingCompany || savedTransporter),
+      hasSavedProfile: Boolean(savedTransporter),
+      savedTransporter: savedTransporter
+        ? {
+            name: String(savedTransporter.name ?? "").trim(),
+            phone: String(savedTransporter.phone ?? "").trim(),
+            email: String(savedTransporter.email ?? "").trim(),
+            city: String(savedTransporter.city ?? "").trim(),
+            uf: String(savedTransporter.uf ?? "").trim(),
+            linkType: String(savedTransporter.link_type ?? "").trim(),
+          }
+        : null,
       publicLookupUnavailable,
     };
   });

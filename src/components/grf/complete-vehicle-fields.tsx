@@ -1,8 +1,13 @@
+import { useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { Loader2, Search } from "lucide-react";
 import { Field } from "@/components/grf/field";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { lookupTransporterCnpj } from "@/lib/grf-cnpj.functions";
 import {
   BODY_TYPES,
   CNH_CATEGORIES,
@@ -15,6 +20,7 @@ import {
   WHEEL_TYPES,
   formatDoc,
   formatPhone,
+  onlyDigits,
   prettyPlate,
 } from "@/lib/grf-domain";
 
@@ -31,6 +37,8 @@ export const completionEmpty = {
 export type CompletionFormState = typeof completionEmpty;
 export type SetCompletionField = (key: keyof CompletionFormState, value: string) => void;
 
+type CnpjLookupState = "idle" | "loading" | "found" | "partial" | "not_found";
+
 export function CompletionSections({
   form,
   set,
@@ -43,13 +51,90 @@ export function CompletionSections({
   showApprovalFields?: boolean;
 }) {
   const companyVehicle = form.linkType === "Frota própria";
+  const lookupCnpj = useServerFn(lookupTransporterCnpj);
+  const [cnpjLookupState, setCnpjLookupState] = useState<CnpjLookupState>("idle");
+  const [cnpjLookupMessage, setCnpjLookupMessage] = useState("");
+
+  async function handleCnpjLookup() {
+    const cnpj = onlyDigits(form.docNumber);
+    if (cnpj.length !== 14) {
+      setCnpjLookupState("idle");
+      setCnpjLookupMessage("");
+      return;
+    }
+
+    setCnpjLookupState("loading");
+    setCnpjLookupMessage("Consultando cadastro da transportadora...");
+
+    try {
+      const result = await lookupCnpj({ data: { cnpj } });
+      if (!result.ok) {
+        setCnpjLookupState("not_found");
+        setCnpjLookupMessage("CNPJ não localizado no cadastro da transportadora. Preencha os dados abaixo normalmente.");
+        return;
+      }
+
+      if (result.savedTransporter) {
+        const saved = result.savedTransporter;
+        set("transporterName", saved.name || result.companyName || form.transporterName);
+        set("phone", saved.phone || form.phone);
+        set("email", saved.email || form.email);
+        set("city", saved.city || result.city || form.city);
+        set("uf", saved.uf || result.uf || form.uf);
+        set("linkType", saved.linkType || form.linkType);
+        setCnpjLookupState("found");
+        setCnpjLookupMessage("Transportadora encontrada. Os dados já cadastrados foram preenchidos automaticamente.");
+        return;
+      }
+
+      if (result.companyName) set("transporterName", result.companyName);
+      if (result.city) set("city", result.city);
+      if (result.uf) set("uf", result.uf);
+      setCnpjLookupState("partial");
+      setCnpjLookupMessage("CNPJ localizado, mas ainda não há um cadastro completo da transportadora no Portal. Complete somente os campos que ficaram em branco.");
+    } catch {
+      setCnpjLookupState("not_found");
+      setCnpjLookupMessage("Não foi possível consultar o CNPJ agora. Você pode preencher os dados manualmente e continuar.");
+    }
+  }
 
   return (
     <>
       <Section title="Responsável / transportador">
         <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="CNPJ" required error={errors.docNumber} className="sm:col-span-2">
+            <div className="flex gap-2">
+              <Input
+                value={form.docNumber}
+                onChange={(e) => {
+                  set("docNumber", formatDoc(e.target.value));
+                  setCnpjLookupState("idle");
+                  setCnpjLookupMessage("");
+                }}
+                onBlur={() => {
+                  if (onlyDigits(form.docNumber).length === 14 && cnpjLookupState === "idle") void handleCnpjLookup();
+                }}
+                inputMode="numeric"
+                placeholder="00.000.000/0000-00"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleCnpjLookup()}
+                disabled={cnpjLookupState === "loading" || onlyDigits(form.docNumber).length !== 14}
+                className="shrink-0"
+              >
+                {cnpjLookupState === "loading" ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
+                Consultar
+              </Button>
+            </div>
+            {cnpjLookupMessage && (
+              <p className={cnpjLookupState === "found" ? "mt-2 text-xs font-medium text-success" : "mt-2 text-xs text-muted-foreground"}>
+                {cnpjLookupMessage}
+              </p>
+            )}
+          </Field>
           <Field label="Nome / Razão social" required error={errors.transporterName} className="sm:col-span-2"><Input value={form.transporterName} onChange={(e) => set("transporterName", e.target.value)} /></Field>
-          <Field label="CPF / CNPJ" required error={errors.docNumber}><Input value={form.docNumber} onChange={(e) => set("docNumber", formatDoc(e.target.value))} /></Field>
           <Field label="Telefone" required error={errors.phone}><Input value={form.phone} onChange={(e) => set("phone", formatPhone(e.target.value))} /></Field>
           <Field label="E-mail" hint="Opcional."><Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} /></Field>
           <Field label="Cidade" required error={errors.city}><Input value={form.city} onChange={(e) => set("city", e.target.value)} /></Field>

@@ -1,12 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Building2, CheckCircle2, Loader2, UserPlus } from "lucide-react";
+import { Building2, CheckCircle2, Loader2, Search, UserPlus } from "lucide-react";
 import { PublicFooter, PublicHeader } from "@/components/grf/chrome";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { transporterSupabase } from "@/integrations/supabase/transporter-client";
+import { lookupTransporterCnpj } from "@/lib/grf-cnpj.functions";
 import { createTransporterAccessRequest } from "@/lib/grf-transporter-access.functions";
 
 export const Route = createFileRoute("/transportador/solicitar-acesso")({
@@ -37,8 +38,19 @@ function formatCnpj(value: string) {
     .replace(/(\d{4})(\d)/, "$1-$2");
 }
 
+type CnpjLookupInfo = {
+  officialName: string | null;
+  tradeName: string | null;
+  city: string | null;
+  uf: string | null;
+  cadastralStatus: string | null;
+  knownToPortal: boolean;
+  publicLookupUnavailable: boolean;
+};
+
 function TransporterAccessRequestPage() {
   const createRequest = useServerFn(createTransporterAccessRequest);
+  const lookupCnpj = useServerFn(lookupTransporterCnpj);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -46,24 +58,81 @@ function TransporterAccessRequestPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [cnpjBusy, setCnpjBusy] = useState(false);
+  const [cnpjLookup, setCnpjLookup] = useState<CnpjLookupInfo | null>(null);
+  const [manualCompanyAllowed, setManualCompanyAllowed] = useState(false);
+  const [cnpjError, setCnpjError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  function handleCnpjChange(value: string) {
+    setCompanyCnpj(formatCnpj(value));
+    setCompanyName("");
+    setCnpjLookup(null);
+    setManualCompanyAllowed(false);
+    setCnpjError(null);
+    setError(null);
+  }
+
+  async function handleCnpjLookup() {
+    setCnpjError(null);
+    setError(null);
+    setCnpjLookup(null);
+    setManualCompanyAllowed(false);
+
+    if (digits(companyCnpj).length !== 14) {
+      setCnpjError("Informe o CNPJ completo com 14 dígitos.");
+      return;
+    }
+
+    setCnpjBusy(true);
+    try {
+      const result = await lookupCnpj({ data: { cnpj: companyCnpj } });
+      if (!result.ok) {
+        setCompanyName("");
+        setManualCompanyAllowed(Boolean(result.allowManual));
+        setCnpjError(result.error);
+        return;
+      }
+
+      setManualCompanyAllowed(false);
+      setCompanyName(result.companyName);
+      setCnpjLookup({
+        officialName: result.officialName,
+        tradeName: result.tradeName,
+        city: result.city,
+        uf: result.uf,
+        cadastralStatus: result.cadastralStatus,
+        knownToPortal: result.knownToPortal,
+        publicLookupUnavailable: result.publicLookupUnavailable,
+      });
+    } catch {
+      setCompanyName("");
+      setCnpjError("Não foi possível consultar o CNPJ agora. Tente novamente.");
+    } finally {
+      setCnpjBusy(false);
+    }
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
 
     const normalizedEmail = email.trim().toLowerCase();
-    if (name.trim().length < 2) {
-      setError("Informe o nome do responsável.");
+    if (digits(companyCnpj).length !== 14) {
+      setError("Informe um CNPJ válido com 14 dígitos.");
+      return;
+    }
+    if (!cnpjLookup && !manualCompanyAllowed) {
+      setError("Consulte o CNPJ antes de continuar.");
       return;
     }
     if (companyName.trim().length < 2) {
-      setError("Informe o nome da empresa.");
+      setError("Informe a razão social da empresa.");
       return;
     }
-    if (digits(companyCnpj).length !== 14) {
-      setError("Informe um CNPJ válido com 14 dígitos.");
+    if (name.trim().length < 2) {
+      setError("Informe o nome do responsável.");
       return;
     }
     if (!normalizedEmail.includes("@")) {
@@ -166,31 +235,70 @@ function TransporterAccessRequestPage() {
                 <div className="flex gap-2">
                   <Building2 className="mt-0.5 size-4 shrink-0 text-blue-600" />
                   <p>
-                    Informe os dados do responsável e da empresa. O acesso só será liberado depois que a GRF confirmar a transportadora correta.
+                    Informe primeiro o CNPJ. O Portal consulta os dados da empresa e preenche a razão social antes de liberar a solicitação de acesso.
                   </p>
                 </div>
               </div>
 
               <form onSubmit={handleSubmit} className="mt-6 space-y-4">
                 <div className="space-y-1.5">
-                  <Label>Nome do responsável</Label>
-                  <Input value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" required />
+                  <Label>CNPJ da empresa</Label>
+                  <div className="flex gap-2 max-sm:flex-col">
+                    <Input
+                      value={companyCnpj}
+                      onChange={(event) => handleCnpjChange(event.target.value)}
+                      inputMode="numeric"
+                      placeholder="00.000.000/0000-00"
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void handleCnpjLookup()}
+                      disabled={cnpjBusy || digits(companyCnpj).length !== 14}
+                      className="shrink-0"
+                    >
+                      {cnpjBusy ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
+                      {cnpjBusy ? "Consultando..." : "Consultar CNPJ"}
+                    </Button>
+                  </div>
+                  {cnpjError && <p className="text-xs font-medium text-destructive">{cnpjError}</p>}
                 </div>
 
                 <div className="space-y-1.5">
                   <Label>Nome / Razão social da empresa</Label>
-                  <Input value={companyName} onChange={(event) => setCompanyName(event.target.value)} required />
+                  <Input
+                    value={companyName}
+                    readOnly={Boolean(cnpjLookup)}
+                    onChange={(event) => setCompanyName(event.target.value)}
+                    placeholder={manualCompanyAllowed ? "Informe a razão social" : "Preenchido após a consulta do CNPJ"}
+                    required
+                  />
+                  {manualCompanyAllowed && !cnpjLookup && (
+                    <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                      A consulta pública está indisponível. Preencha a razão social manualmente; a GRF continuará validando o CNPJ antes de liberar o acesso.
+                    </p>
+                  )}
+                  {cnpjLookup && (
+                    <div className="rounded-lg border border-success/30 bg-success/5 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                      <p className="font-semibold text-foreground">
+                        CNPJ localizado{cnpjLookup.knownToPortal ? " · transportadora já cadastrada no Portal GRF" : ""}.
+                      </p>
+                      {cnpjLookup.tradeName && <p>Nome fantasia: {cnpjLookup.tradeName}</p>}
+                      {(cnpjLookup.city || cnpjLookup.uf) && (
+                        <p>Localidade: {[cnpjLookup.city, cnpjLookup.uf].filter(Boolean).join(" / ")}</p>
+                      )}
+                      {cnpjLookup.cadastralStatus && <p>Situação cadastral: {cnpjLookup.cadastralStatus}</p>}
+                      {cnpjLookup.publicLookupUnavailable && (
+                        <p>Os dados complementares da consulta pública estão temporariamente indisponíveis.</p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>CNPJ da empresa</Label>
-                  <Input
-                    value={companyCnpj}
-                    onChange={(event) => setCompanyCnpj(formatCnpj(event.target.value))}
-                    inputMode="numeric"
-                    placeholder="00.000.000/0000-00"
-                    required
-                  />
+                  <Label>Nome do responsável</Label>
+                  <Input value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" required />
                 </div>
 
                 <div className="space-y-1.5">
@@ -216,7 +324,7 @@ function TransporterAccessRequestPage() {
                   </p>
                 )}
 
-                <Button type="submit" className="w-full bg-blue-600 text-white hover:bg-blue-700" disabled={busy}>
+                <Button type="submit" className="w-full bg-blue-600 text-white hover:bg-blue-700" disabled={busy || cnpjBusy}>
                   {busy ? <Loader2 className="size-4 animate-spin" /> : <UserPlus className="size-4" />}
                   Enviar solicitação
                 </Button>

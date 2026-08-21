@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { getOccupationPanelHtml } from "@/lib/grf-occupation-panel.functions";
+import { createOccupationPanelTicket } from "@/lib/grf-occupation-panel.functions";
 
 export const Route = createFileRoute("/admin/ocupacao")({
   head: () => ({
@@ -16,16 +16,17 @@ export const Route = createFileRoute("/admin/ocupacao")({
 });
 
 function OccupationPanelPage() {
-  const getPanel = useServerFn(getOccupationPanelHtml);
-  const [html, setHtml] = useState("");
+  const requestTicket = useServerFn(createOccupationPanelTicket);
+  const [src, setSrc] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
     void (async () => {
       try {
-        const result = await getPanel();
-        if (active) setHtml(result.html);
+        const { ticket } = await requestTicket();
+        // O HTML não vem por aqui: o iframe carrega a rota protegida direto.
+        if (active) setSrc(`/admin/ocupacao/painel?t=${encodeURIComponent(ticket)}`);
       } catch {
         if (active) setError("Não foi possível carregar o Painel de Ocupação.");
       }
@@ -33,7 +34,7 @@ function OccupationPanelPage() {
     return () => {
       active = false;
     };
-  }, [getPanel]);
+  }, [requestTicket]);
 
   if (error) {
     return (
@@ -49,7 +50,7 @@ function OccupationPanelPage() {
     );
   }
 
-  if (!html) {
+  if (!src) {
     return (
       <main className="flex min-h-[65vh] flex-1 items-center justify-center">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -63,7 +64,7 @@ function OccupationPanelPage() {
     <main className="min-h-0 flex-1 bg-slate-100">
       <iframe
         title="Painel de Ocupação"
-        srcDoc={html}
+        src={src}
         className="block h-[calc(100vh-68px)] min-h-[720px] w-full border-0 bg-white"
       />
     </main>

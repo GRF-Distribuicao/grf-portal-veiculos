@@ -14,8 +14,8 @@ import panelBase64 from "@/assets/ocupacao/painel.b64.txt?raw";
  * a falha aparece aqui com mensagem clara — e não como um gunzip quebrado
  * devolvendo HTML pela metade (foi exatamente o que derrubou o painel antes).
  */
-const EXPECTED_BASE64_LENGTH = 299288;
-const EXPECTED_HTML_BYTES = 796798;
+const EXPECTED_BASE64_LENGTH = 298048;
+const EXPECTED_HTML_BYTES = 798226;
 
 let cachedHtml: string | null = null;
 

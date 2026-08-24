@@ -13,7 +13,7 @@ export function GrfLogo({
       <span className={inverted ? "flex min-w-0 items-center justify-center bg-transparent" : "flex min-w-0 items-center justify-center"}>
         <img
           src="/grf-logo-exata.png.png"
-          alt="GRF Distribuição Garrafaria"
+          alt="GRF Distribuição"
           className={compact ? "h-10 w-auto object-contain" : "h-16 w-auto max-w-[260px] object-contain sm:h-[108px] sm:max-w-[310px] max-[640px]:h-[62px] max-[640px]:max-w-[205px]"}
           loading="eager"
           width={310}

@@ -97,9 +97,11 @@ export const Route = createFileRoute("/admin/ocupacao_/painel")({
           const result = await syncOccupationRecords(payload.rows as Record<string, unknown>[], sourceFile);
           return jsonResponse(200, { ok: true, ...result });
         } catch (err) {
-          return jsonResponse(500, {
-            error: err instanceof Error ? err.message : "Falha ao salvar os dados no banco.",
-          });
+          // A mensagem de OccupationSyncError já é escrita para o operador ler
+          // no painel (ex.: "a tabela ainda não existe, rode a migration").
+          const message = err instanceof Error ? err.message : "Falha ao salvar os dados no banco.";
+          console.error("[ocupacao] falha ao sincronizar planilha:", err);
+          return jsonResponse(500, { error: message });
         }
       },
     },

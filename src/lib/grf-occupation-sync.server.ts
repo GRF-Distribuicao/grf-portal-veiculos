@@ -316,3 +316,119 @@ export async function syncOccupationRecords(
   result.alreadyStored = parsed.length - result.inserted;
   return result;
 }
+
+/* ---------------------------------------------------------------------------
+ * Leitura: histórico acumulado de volta para o painel
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Colunas do banco na ordem/nome em que a planilha as traz. O painel recebe as
+ * linhas exatamente no formato de uma aba lida do Excel (linha 0 = cabeçalho),
+ * e assim reaproveita `splitUnifiedSheet` — as regras de classificação, de
+ * exclusão de placa/rota/apoio e de agregação de transbordo continuam num
+ * lugar só, sem cópia paralela aqui no servidor.
+ */
+const EXPORT_COLUMNS: ReadonlyArray<readonly [dbColumn: string, sheetHeader: string]> = [
+  ["rota", "Rota"],
+  ["id_romaneio", "idRomaneio"],
+  ["placa", "Placa"],
+  ["transportadora", "Transportadora"],
+  ["data_movimento", "DataMovimento"],
+  ["id_romaneio_transb", "idRomaneioTransb"],
+  ["placa_transb", "PlacaTransb"],
+  ["transp_transbordo", "TranspTransbordo"],
+  ["notas_fiscais", "NotasFiscais"],
+  ["entregas", "Entregas"],
+  ["ponto_apoio", "PontoApoio"],
+  ["volumes", "Volumes"],
+  ["itens", "itens"],
+  ["valor", "Valor"],
+  ["peso_bruto", "PesoBruto"],
+  ["peso_maximo", "PesoMaximo"],
+  ["perc_ocup_peso", "PercOcupPeso"],
+  ["volume_m3", "VolumeM3"],
+  ["volume_maximo", "VolumeMaximo"],
+  ["perc_ocup_volume", "PercOcupVolume"],
+  ["pallets_inf", "PalletsInf"],
+  ["pallets_maximo", "PalletsMaximo"],
+  ["perc_ocup_pallets", "PercOcupPallets"],
+];
+
+/** PostgREST devolve no máximo 1000 linhas por requisição. */
+const READ_PAGE_SIZE = 1000;
+
+/** Teto de segurança: o painel é uma análise de período, não um dump da base. */
+const MAX_ROWS_RETURNED = 25000;
+
+export interface LoadResult {
+  /** Linhas no formato de aba do Excel: `rows[0]` é o cabeçalho. */
+  rows: unknown[][];
+  /** Quantidade de registros (sem contar o cabeçalho). */
+  count: number;
+  dateRange: { from: string; to: string } | null;
+  /** true quando o teto foi atingido e registros mais antigos ficaram de fora. */
+  truncated: boolean;
+}
+
+/**
+ * Lê o histórico acumulado. Traz os registros mais recentes primeiro (para que
+ * o teto corte o passado distante, não o presente) e devolve em ordem
+ * cronológica, como o painel espera de uma planilha.
+ */
+export async function loadOccupationRecords(options?: {
+  from?: string | null;
+  to?: string | null;
+}): Promise<LoadResult> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const db = supabaseAdmin as any;
+
+  const columns = EXPORT_COLUMNS.map(([dbColumn]) => dbColumn).join(", ");
+  const collected: Record<string, unknown>[] = [];
+  let truncated = false;
+
+  for (let offset = 0; offset < MAX_ROWS_RETURNED; offset += READ_PAGE_SIZE) {
+    let query = db
+      .from("grf_occupation_records")
+      .select(columns)
+      .order("data_movimento", { ascending: false })
+      .order("id_romaneio", { ascending: false })
+      .range(offset, offset + READ_PAGE_SIZE - 1);
+
+    if (options?.from) query = query.gte("data_movimento", options.from);
+    if (options?.to) query = query.lte("data_movimento", options.to);
+
+    const { data, error } = await query;
+    if (error) throw new OccupationSyncError(describeDbError(error));
+
+    const page = Array.isArray(data) ? data : [];
+    collected.push(...page);
+
+    if (page.length < READ_PAGE_SIZE) break;
+    if (collected.length >= MAX_ROWS_RETURNED) {
+      truncated = true;
+      break;
+    }
+  }
+
+  // De volta à ordem cronológica (a leitura foi do mais novo para o mais antigo).
+  collected.reverse();
+
+  const header = EXPORT_COLUMNS.map(([, sheetHeader]) => sheetHeader);
+  const rows: unknown[][] = [header];
+  for (const record of collected) {
+    rows.push(EXPORT_COLUMNS.map(([dbColumn]) => record[dbColumn] ?? null));
+  }
+
+  const dates = collected
+    .map((r) => r["data_movimento"])
+    .filter((d): d is string => typeof d === "string")
+    .sort();
+
+  return {
+    rows,
+    count: collected.length,
+    dateRange:
+      dates.length > 0 ? { from: dates[0] as string, to: dates[dates.length - 1] as string } : null,
+    truncated,
+  };
+}

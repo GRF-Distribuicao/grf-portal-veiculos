@@ -75,15 +75,37 @@ export const Route = createFileRoute("/admin/ocupacao_/painel")({
         });
       },
 
+      /**
+       * Duas operações, ambas protegidas pelo mesmo ticket:
+       *   { action: "load" }  → devolve o histórico acumulado para o painel
+       *   { rows: [...] }     → grava as linhas da planilha recém-carregada
+       */
       POST: async ({ request }) => {
         const auth = await requireGrfUserFromTicket(request);
         if (auth instanceof Response) return auth;
 
-        let payload: { rows?: unknown; sourceFile?: unknown };
+        let payload: { rows?: unknown; sourceFile?: unknown; action?: unknown; from?: unknown; to?: unknown };
         try {
           payload = await request.json();
         } catch {
           return jsonResponse(400, { error: "Corpo da requisição inválido (esperado JSON)." });
+        }
+
+        const isDate = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+
+        if (payload.action === "load") {
+          try {
+            const { loadOccupationRecords } = await import("@/lib/grf-occupation-sync.server");
+            const result = await loadOccupationRecords({
+              from: isDate(payload.from) ? payload.from : null,
+              to: isDate(payload.to) ? payload.to : null,
+            });
+            return jsonResponse(200, { ok: true, ...result });
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "Falha ao ler o histórico do banco.";
+            console.error("[ocupacao] falha ao carregar histórico:", err);
+            return jsonResponse(500, { error: message });
+          }
         }
 
         if (!Array.isArray(payload.rows)) {

@@ -432,3 +432,104 @@ export async function loadOccupationRecords(options?: {
     truncated,
   };
 }
+
+/* ---------------------------------------------------------------------------
+ * Capacidade da frota, direto do cadastro mestre
+ * ------------------------------------------------------------------------ */
+
+export interface FleetEntry {
+  /** Capacidade de peso — usada na ocupação de DISTRIBUIÇÃO. */
+  capKg: number | null;
+  /** Posições-palete — usadas na ocupação de TRANSBORDO. */
+  capPaletes: number | null;
+  tipoVeic: string | null;
+  transportadora: string | null;
+}
+
+export interface FleetResult {
+  /** Placa (maiúscula, sem separadores) → capacidade cadastrada. */
+  fleet: Record<string, FleetEntry>;
+  /** Veículos lidos do cadastro. */
+  count: number;
+  /** Quantos têm LOTAÇÃO (KG) preenchida. */
+  withCapKg: number;
+  /** Quantos têm QUANTIDADE DE PALLETS preenchida. */
+  withPallets: number;
+}
+
+function normalizePlate(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const plate = value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  return plate.length >= 6 ? plate : null;
+}
+
+function positiveNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Lê a capacidade da frota do cadastro mestre (`vehicles`), que é o que a
+ * equipe mantém pela Área GRF. Assim uma lotação corrigida no cadastro passa a
+ * valer no painel na abertura seguinte, sem precisar regerar nada.
+ *
+ * Fonte de cada número, conforme a operação:
+ *   DISTRIBUIÇÃO → LOTAÇÃO (KG)  = `lotacao_kg`
+ *   TRANSBORDO   → QUANT. PALLETS = `pallets`
+ *
+ * `max_capacity_kg` só entra se `lotacao_kg` estiver vazia — os dois campos são
+ * gravados juntos no cadastro, então na prática coincidem; a ordem existe só
+ * para cadastros antigos onde apenas um deles foi preenchido.
+ */
+export async function loadFleetCapacity(): Promise<FleetResult> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const db = supabaseAdmin as any;
+
+  const fleet: Record<string, FleetEntry> = {};
+  let count = 0;
+  let withCapKg = 0;
+  let withPallets = 0;
+
+  for (let offset = 0; ; offset += READ_PAGE_SIZE) {
+    const { data, error } = await db
+      .from("vehicles")
+      .select("plate, lotacao_kg, max_capacity_kg, pallets, vehicle_type, transporter_name")
+      .order("plate", { ascending: true })
+      .range(offset, offset + READ_PAGE_SIZE - 1);
+
+    if (error) throw new OccupationSyncError(describeFleetError(error));
+
+    const page = Array.isArray(data) ? data : [];
+    for (const row of page as Record<string, unknown>[]) {
+      const plate = normalizePlate(row["plate"]);
+      if (!plate) continue;
+
+      const capKg = positiveNumber(row["lotacao_kg"]) ?? positiveNumber(row["max_capacity_kg"]);
+      const capPaletes = positiveNumber(row["pallets"]);
+
+      count += 1;
+      if (capKg !== null) withCapKg += 1;
+      if (capPaletes !== null) withPallets += 1;
+
+      fleet[plate] = {
+        capKg,
+        capPaletes,
+        tipoVeic: typeof row["vehicle_type"] === "string" ? row["vehicle_type"] : null,
+        transportadora: typeof row["transporter_name"] === "string" ? row["transporter_name"] : null,
+      };
+    }
+
+    if (page.length < READ_PAGE_SIZE) break;
+  }
+
+  return { fleet, count, withCapKg, withPallets };
+}
+
+function describeFleetError(error: { message?: string; code?: string }): string {
+  const message = error.message ?? "erro desconhecido";
+  if (/column .* does not exist/i.test(message)) {
+    return `O cadastro de veículos não tem uma das colunas esperadas (${message}).`;
+  }
+  return `Não foi possível ler a capacidade da frota: ${message}`;
+}

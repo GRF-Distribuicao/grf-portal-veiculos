@@ -95,12 +95,36 @@ export const Route = createFileRoute("/admin/ocupacao_/painel")({
 
         if (payload.action === "load") {
           try {
-            const { loadOccupationRecords } = await import("@/lib/grf-occupation-sync.server");
-            const result = await loadOccupationRecords({
-              from: isDate(payload.from) ? payload.from : null,
-              to: isDate(payload.to) ? payload.to : null,
+            const { loadOccupationRecords, loadFleetCapacity } = await import(
+              "@/lib/grf-occupation-sync.server"
+            );
+
+            // A capacidade da frota é o denominador da ocupação: se o cadastro
+            // não puder ser lido, o painel ainda funciona com o retrato que já
+            // vem embutido nele, então a falha aqui não derruba o histórico.
+            const [records, fleetResult] = await Promise.all([
+              loadOccupationRecords({
+                from: isDate(payload.from) ? payload.from : null,
+                to: isDate(payload.to) ? payload.to : null,
+              }),
+              loadFleetCapacity().catch((err) => {
+                console.error("[ocupacao] falha ao ler capacidade da frota:", err);
+                return null;
+              }),
+            ]);
+
+            return jsonResponse(200, {
+              ok: true,
+              ...records,
+              fleet: fleetResult?.fleet ?? null,
+              fleetStats: fleetResult
+                ? {
+                    count: fleetResult.count,
+                    withCapKg: fleetResult.withCapKg,
+                    withPallets: fleetResult.withPallets,
+                  }
+                : null,
             });
-            return jsonResponse(200, { ok: true, ...result });
           } catch (err) {
             const message = err instanceof Error ? err.message : "Falha ao ler o histórico do banco.";
             console.error("[ocupacao] falha ao carregar histórico:", err);

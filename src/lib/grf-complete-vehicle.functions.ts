@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { ATTACHMENT_TYPES } from "@/lib/grf-domain";
-import { makeProtocol } from "@/lib/grf-server-helpers";
+import { makeProtocol, resolveVehicleTransporterName } from "@/lib/grf-server-helpers";
 
 const completeVehicleSchema = z.object({
   transporter: z.object({
@@ -81,7 +81,7 @@ export const completeExistingVehicle = createServerFn({ method: "POST" })
 
     const { data: master, error: masterError } = await db
       .from("vehicles")
-      .select("id, plate, vehicle_type, species, wheel_type, body_type, manufacture_year, model_year, plate_city, plate_uf, color, fuel, company_vehicle")
+      .select("id, plate, vehicle_type, species, wheel_type, body_type, manufacture_year, model_year, plate_city, plate_uf, color, fuel, company_vehicle, sankhya_registered, transporter_name")
       .eq("plate", plate)
       .maybeSingle();
 
@@ -204,7 +204,8 @@ export const completeExistingVehicle = createServerFn({ method: "POST" })
       .from("vehicles")
       .update({
         completion_status: "EM_ANALISE",
-        transporter_name: data.transporter.name,
+        // Veículo do Sankhya mantém o nome operacional; ver resolveVehicleTransporterName.
+        transporter_name: resolveVehicleTransporterName(master, data.transporter.name),
         driver_name: data.driver.name,
         brand_model: data.vehicle.brandModel,
         body_type: data.vehicle.bodyType || master.body_type,

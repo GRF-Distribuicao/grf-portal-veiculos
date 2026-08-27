@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { ATTACHMENT_TYPES } from "@/lib/grf-domain";
+import { resolveVehicleTransporterName } from "@/lib/grf-server-helpers";
 import { STORAGE_BUCKET } from "@/integrations/supabase/env";
 
 const authSchema = z.object({
@@ -327,11 +328,18 @@ export const resubmitReturnedCorrection = createServerFn({ method: "POST" })
     }
 
     if (registration.vehicle_id) {
+      const { data: master } = await ctx.db
+        .from("vehicles")
+        .select("sankhya_registered, transporter_name")
+        .eq("id", registration.vehicle_id)
+        .maybeSingle();
+
       await ctx.db
         .from("vehicles")
         .update({
           completion_status: "EM_ANALISE",
-          transporter_name: data.transporter.name,
+          // Veículo do Sankhya mantém o nome operacional; ver resolveVehicleTransporterName.
+          transporter_name: resolveVehicleTransporterName(master, data.transporter.name),
           driver_name: data.driver.name,
           brand_model: data.vehicle.brandModel,
           vehicle_type: data.vehicle.vehicleType || null,

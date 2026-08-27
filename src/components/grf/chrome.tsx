@@ -21,8 +21,8 @@ export function GrfLogo({
         />
       </span>
       {!compact && (
-        <span className="ml-7 hidden whitespace-nowrap font-display text-xl font-extrabold tracking-[0.08em] text-white uppercase sm:block lg:text-[28px]">
-          Portal de veículos
+        <span className="ml-7 hidden whitespace-nowrap font-display text-xl font-extrabold tracking-[0.10em] text-white uppercase sm:block lg:text-[28px]">
+          Portal do Transportador
         </span>
       )}
     </span>
@@ -75,8 +75,7 @@ export function PublicFooter() {
   return (
     <footer className="border-t border-white/10 bg-[#070d0c] text-white">
       <div className="mx-auto max-w-7xl px-4 py-6 text-xs text-white/55 sm:px-6">
-        Portal GRF – cadastro de veículos de transportadores e agregados. Integração com o Sankhya
-        prevista para a próxima etapa.
+        Portal GRF – cadastro de veículos de transportadores e agregados.
       </div>
     </footer>
   );

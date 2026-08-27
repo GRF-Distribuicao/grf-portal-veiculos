@@ -1,8 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { useState } from "react";
 import { toast } from "sonner";
-import { Check, Clock3, MailCheck, MailWarning, ShieldCheck, UserCheck, UserX } from "lucide-react";
+import {
+  Check,
+  Clock3,
+  MailCheck,
+  MailWarning,
+  ShieldCheck,
+  Trash2,
+  UserCheck,
+  Users,
+  UserX,
+} from "lucide-react";
 import { TransporterAccessRequests } from "@/components/grf/transporter-access-requests";
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/grf-domain";
@@ -10,14 +21,12 @@ import {
   approveGrfAccessRequest,
   listGrfAccessRequests,
   rejectGrfAccessRequest,
+  revokeGrfAccess,
 } from "@/lib/grf-access.functions";
 
 export const Route = createFileRoute("/admin/acessos")({
   head: () => ({
-    meta: [
-      { title: "Aprovação de acessos – Área GRF" },
-      { name: "robots", content: "noindex" },
-    ],
+    meta: [{ title: "Aprovação de acessos – Área GRF" }, { name: "robots", content: "noindex" }],
   }),
   component: AccessRequestsPage,
 });
@@ -35,17 +44,35 @@ type AccessRow = {
   notification_error: string | null;
 };
 
+type ActiveAccess = {
+  id: string;
+  user_id: string;
+  name: string;
+  email: string;
+  role: "admin" | "analista" | string;
+  approved_at: string | null;
+};
+
 const STATUS = {
-  PENDING: { label: "Aguardando aprovação", className: "border-warning/30 bg-warning/10 text-warning-foreground" },
+  PENDING: {
+    label: "Aguardando aprovação",
+    className: "border-warning/30 bg-warning/10 text-warning-foreground",
+  },
   APPROVED: { label: "Aprovado", className: "border-success/30 bg-success/10 text-success" },
-  REJECTED: { label: "Reprovado", className: "border-destructive/30 bg-destructive/10 text-destructive" },
+  REJECTED: {
+    label: "Reprovado",
+    className: "border-destructive/30 bg-destructive/10 text-destructive",
+  },
+  REVOKED: { label: "Acesso excluído", className: "border-muted bg-muted text-muted-foreground" },
 } as const;
 
 function AccessRequestsPage() {
   const list = useServerFn(listGrfAccessRequests);
   const approve = useServerFn(approveGrfAccessRequest);
   const reject = useServerFn(rejectGrfAccessRequest);
+  const revoke = useServerFn(revokeGrfAccess);
   const queryClient = useQueryClient();
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["grf-access-requests"],
@@ -78,7 +105,27 @@ function AccessRequestsPage() {
     await refresh();
   }
 
+  async function handleRevoke(access: ActiveAccess) {
+    if (
+      !window.confirm(
+        `Excluir o acesso à Área GRF de ${access.name} (${access.email})? O histórico será preservado.`,
+      )
+    )
+      return;
+    setBusyId(access.user_id);
+    const result = await revoke({ data: { userId: access.user_id } });
+    setBusyId(null);
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    if ("warning" in result && result.warning) toast.warning(result.warning);
+    else toast.success(`Acesso de ${access.name} excluído.`);
+    await refresh();
+  }
+
   const rows = (data?.rows ?? []) as AccessRow[];
+  const activeAccesses = (data?.activeAccesses ?? []) as ActiveAccess[];
   const pending = rows.filter((r) => r.status === "PENDING");
   const history = rows.filter((r) => r.status !== "PENDING");
 
@@ -94,12 +141,14 @@ function AccessRequestsPage() {
             Solicitações de acesso à Área GRF
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Uma aprovação feita por qualquer responsável autorizado libera o usuário para entrar na área interna.
+            Uma aprovação feita por qualquer responsável autorizado libera o usuário para entrar na
+            área interna.
           </p>
         </div>
         {data?.approverEmail && (
           <div className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground shadow-sm">
-            Responsável autenticado: <strong className="text-foreground">{data.approverEmail}</strong>
+            Responsável autenticado:{" "}
+            <strong className="text-foreground">{data.approverEmail}</strong>
           </div>
         )}
       </div>
@@ -112,7 +161,8 @@ function AccessRequestsPage() {
 
       {error && (
         <div className="mt-8 rounded-xl border border-destructive/30 bg-destructive/10 p-5 text-sm text-destructive">
-          Não foi possível carregar as solicitações. Confirme se este usuário está na lista de responsáveis autorizados.
+          Não foi possível carregar as solicitações. Confirme se este usuário está na lista de
+          responsáveis autorizados.
         </div>
       )}
 
@@ -120,9 +170,57 @@ function AccessRequestsPage() {
         <>
           <section className="mt-8">
             <div className="flex items-center gap-2">
+              <Users className="size-5 text-primary" />
+              <h2 className="text-lg font-bold">Acessos ativos da GRF</h2>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-bold">
+                {activeAccesses.length}
+              </span>
+            </div>
+            <div className="mt-4 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+              {activeAccesses.length === 0 ? (
+                <p className="p-6 text-sm text-muted-foreground">Nenhum acesso GRF ativo.</p>
+              ) : (
+                <div className="divide-y divide-border">
+                  {activeAccesses.map((access) => (
+                    <div
+                      key={access.id}
+                      className="flex flex-wrap items-center justify-between gap-3 p-4"
+                    >
+                      <div>
+                        <p className="text-sm font-bold">{access.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {access.email} · {access.role === "admin" ? "Administrador" : "Analista"}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                          busyId === access.user_id || access.user_id === data?.currentUserId
+                        }
+                        title={
+                          access.user_id === data?.currentUserId
+                            ? "Você não pode excluir o próprio acesso"
+                            : undefined
+                        }
+                        onClick={() => void handleRevoke(access)}
+                      >
+                        <Trash2 className="size-4" /> Excluir acesso
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="mt-8">
+            <div className="flex items-center gap-2">
               <Clock3 className="size-5 text-warning" />
               <h2 className="text-lg font-bold">Aguardando aprovação</h2>
-              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-bold">{pending.length}</span>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-bold">
+                {pending.length}
+              </span>
             </div>
 
             {pending.length === 0 ? (
@@ -132,7 +230,10 @@ function AccessRequestsPage() {
             ) : (
               <div className="mt-4 grid gap-4">
                 {pending.map((row) => (
-                  <article key={row.id} className="rounded-xl border border-border bg-card p-5 shadow-sm">
+                  <article
+                    key={row.id}
+                    className="rounded-xl border border-border bg-card p-5 shadow-sm"
+                  >
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
                         <h3 className="text-base font-bold">{row.name}</h3>
@@ -141,7 +242,9 @@ function AccessRequestsPage() {
                           Solicitado em {formatDateTime(row.requested_at)}
                         </p>
                       </div>
-                      <span className={`rounded-full border px-3 py-1 text-xs font-bold ${STATUS.PENDING.className}`}>
+                      <span
+                        className={`rounded-full border px-3 py-1 text-xs font-bold ${STATUS.PENDING.className}`}
+                      >
                         {STATUS.PENDING.label}
                       </span>
                     </div>
@@ -152,8 +255,12 @@ function AccessRequestsPage() {
                           <MailCheck className="size-4" /> Responsáveis notificados por e-mail
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 text-muted-foreground" title={row.notification_error ?? undefined}>
-                          <MailWarning className="size-4" /> Notificação por e-mail ainda não enviada
+                        <span
+                          className="inline-flex items-center gap-1.5 text-muted-foreground"
+                          title={row.notification_error ?? undefined}
+                        >
+                          <MailWarning className="size-4" /> Notificação por e-mail ainda não
+                          enviada
                         </span>
                       )}
                     </div>
@@ -179,23 +286,32 @@ function AccessRequestsPage() {
             </div>
             <div className="mt-4 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
               {history.length === 0 ? (
-                <p className="p-6 text-sm text-muted-foreground">Ainda não há decisões registradas.</p>
+                <p className="p-6 text-sm text-muted-foreground">
+                  Ainda não há decisões registradas.
+                </p>
               ) : (
                 <div className="divide-y divide-border">
                   {history.slice(0, 30).map((row) => {
                     const status = STATUS[row.status as keyof typeof STATUS] ?? STATUS.REJECTED;
                     return (
-                      <div key={row.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+                      <div
+                        key={row.id}
+                        className="flex flex-wrap items-center justify-between gap-3 p-4"
+                      >
                         <div>
                           <p className="text-sm font-bold">{row.name}</p>
                           <p className="text-xs text-muted-foreground">{row.email}</p>
                         </div>
                         <div className="text-right">
-                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${status.className}`}>
+                          <span
+                            className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${status.className}`}
+                          >
                             {status.label}
                           </span>
                           {row.decided_at && (
-                            <p className="mt-1 text-xs text-muted-foreground">{formatDateTime(row.decided_at)}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {formatDateTime(row.decided_at)}
+                            </p>
                           )}
                         </div>
                       </div>

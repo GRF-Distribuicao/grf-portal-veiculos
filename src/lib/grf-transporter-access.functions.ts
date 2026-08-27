@@ -5,7 +5,11 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 const requestSchema = z.object({
   userId: z.string().uuid(),
   name: z.string().trim().min(2).max(120),
-  email: z.string().trim().email().transform((value) => value.toLowerCase()),
+  email: z
+    .string()
+    .trim()
+    .email()
+    .transform((value) => value.toLowerCase()),
   companyName: z.string().trim().min(2).max(160),
   companyCnpj: z.string().transform((value) => value.replace(/\D/g, "")),
 });
@@ -15,6 +19,10 @@ const decisionSchema = z.object({
   companyId: z.string().uuid().nullable().optional(),
   createNewCompany: z.boolean().optional().default(false),
   note: z.string().trim().max(500).optional().default(""),
+});
+
+const revokeSchema = z.object({
+  membershipId: z.string().uuid(),
 });
 
 function normalizeCompanyName(value: string) {
@@ -32,7 +40,9 @@ function isValidCnpj(value: string) {
   if (cnpj.length !== 14 || /^(\d)\1{13}$/.test(cnpj)) return false;
 
   const calcDigit = (base: string, weights: number[]) => {
-    const sum = base.split("").reduce((acc, digit, index) => acc + Number(digit) * weights[index], 0);
+    const sum = base
+      .split("")
+      .reduce((acc, digit, index) => acc + Number(digit) * weights[index], 0);
     const remainder = sum % 11;
     return remainder < 2 ? 0 : 11 - remainder;
   };
@@ -126,7 +136,10 @@ async function notifyApprovers(request: {
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    return { sent: false, error: `Falha no envio do e-mail (${response.status}): ${body.slice(0, 300)}` };
+    return {
+      sent: false,
+      error: `Falha no envio do e-mail (${response.status}): ${body.slice(0, 300)}`,
+    };
   }
   return { sent: true, error: null as string | null };
 }
@@ -140,7 +153,9 @@ export const createTransporterAccessRequest = createServerFn({ method: "POST" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
-    const { data: authUser, error: userError } = await supabaseAdmin.auth.admin.getUserById(data.userId);
+    const { data: authUser, error: userError } = await supabaseAdmin.auth.admin.getUserById(
+      data.userId,
+    );
     const user = authUser?.user;
 
     if (userError || !user || (user.email ?? "").toLowerCase() !== data.email) {
@@ -155,7 +170,8 @@ export const createTransporterAccessRequest = createServerFn({ method: "POST" })
     if (grfRole) {
       return {
         ok: false as const,
-        error: "Este e-mail pertence à Área GRF. Os acessos internos e de transportadora são separados.",
+        error:
+          "Este e-mail pertence à Área GRF. Os acessos internos e de transportadora são separados.",
       };
     }
 
@@ -222,26 +238,34 @@ export const listTransporterAccessRequests = createServerFn({ method: "POST" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
-    const [{ data: requests, error: requestError }, { data: companies, error: companyError }, { data: links }] =
-      await Promise.all([
-        db
-          .from("transporter_access_requests")
-          .select("id, user_id, requester_name, email, company_name, company_cnpj, status, requested_at, decided_at, decision_note, matched_company_id, notification_sent_at, notification_error")
-          .order("requested_at", { ascending: false })
-          .limit(100),
-        db
-          .from("transporter_companies")
-          .select("id, name, normalized_name, cnpj, active")
-          .eq("active", true)
-          .order("name"),
-        db
-          .from("transporter_vehicle_links")
-          .select("transporter_company_id")
-          .eq("active", true),
-      ]);
+    const [
+      { data: requests, error: requestError },
+      { data: companies, error: companyError },
+      { data: links },
+      { data: memberships, error: membershipError },
+    ] = await Promise.all([
+      db
+        .from("transporter_access_requests")
+        .select(
+          "id, user_id, requester_name, email, company_name, company_cnpj, status, requested_at, decided_at, revoked_at, decision_note, matched_company_id, notification_sent_at, notification_error",
+        )
+        .order("requested_at", { ascending: false })
+        .limit(100),
+      db
+        .from("transporter_companies")
+        .select("id, name, normalized_name, cnpj, active")
+        .eq("active", true)
+        .order("name"),
+      db.from("transporter_vehicle_links").select("transporter_company_id").eq("active", true),
+      db
+        .from("transporter_memberships")
+        .select("id, user_id, role, approved_at, request_id, transporter_company_id")
+        .eq("active", true),
+    ]);
 
     if (requestError) throw new Error(requestError.message);
     if (companyError) throw new Error(companyError.message);
+    if (membershipError) throw new Error(membershipError.message);
 
     const vehicleCounts = new Map<string, number>();
     for (const link of links ?? []) {
@@ -268,7 +292,133 @@ export const listTransporterAccessRequests = createServerFn({ method: "POST" })
       };
     });
 
-    return { rows: requestRows, companies: companyRows, approverEmail: approver.email };
+    const activeAccesses = (
+      await Promise.all(
+        (memberships ?? []).map(async (membership: any) => {
+          const userId = String(membership.user_id);
+          const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
+          const user = authUser?.user;
+          if (!user) return null;
+          const request = requestRows.find((row: any) => String(row.user_id) === userId);
+          const company = companyRows.find(
+            (row: { id: string }) => row.id === String(membership.transporter_company_id),
+          );
+          const metadata = user.user_metadata ?? {};
+          return {
+            id: String(membership.id),
+            membership_id: String(membership.id),
+            user_id: userId,
+            name:
+              request?.requester_name ??
+              metadata["full_name"] ??
+              metadata["name"] ??
+              user.email ??
+              "Usuário da transportadora",
+            email: user.email ?? request?.email ?? "",
+            role: String(membership.role),
+            approved_at: membership.approved_at ?? null,
+            company_id: String(membership.transporter_company_id),
+            company_name: company?.name ?? "Transportadora",
+          };
+        }),
+      )
+    ).filter(Boolean);
+
+    return {
+      rows: requestRows,
+      companies: companyRows,
+      activeAccesses,
+      approverEmail: approver.email,
+    };
+  });
+
+export const revokeTransporterAccess = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => revokeSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    const approver = await getApprover(context.userId);
+    if (!approver)
+      return { ok: false as const, error: "Você não possui permissão para excluir acessos." };
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    const { data: membership, error: membershipError } = await db
+      .from("transporter_memberships")
+      .select("id, user_id, transporter_company_id, request_id, active")
+      .eq("id", data.membershipId)
+      .eq("active", true)
+      .maybeSingle();
+
+    if (membershipError)
+      return { ok: false as const, error: "Não foi possível conferir o acesso informado." };
+    if (!membership)
+      return { ok: false as const, error: "Este acesso de transportadora já foi excluído." };
+
+    const now = new Date().toISOString();
+    const { error: deleteMembershipError } = await db
+      .from("transporter_memberships")
+      .delete()
+      .eq("id", membership.id)
+      .eq("active", true);
+    if (deleteMembershipError) {
+      return {
+        ok: false as const,
+        error: "Não foi possível excluir o vínculo com a transportadora.",
+      };
+    }
+
+    let requestUpdate = db
+      .from("transporter_access_requests")
+      .update({ status: "REVOKED", revoked_at: now, revoked_by: context.userId })
+      .eq("status", "APPROVED");
+    requestUpdate = membership.request_id
+      ? requestUpdate.eq("id", membership.request_id)
+      : requestUpdate
+          .eq("user_id", membership.user_id)
+          .eq("matched_company_id", membership.transporter_company_id);
+    await requestUpdate;
+
+    const [{ data: remainingMembership }, { data: grfRole }, { data: authUser }] =
+      await Promise.all([
+        db
+          .from("transporter_memberships")
+          .select("transporter_company_id")
+          .eq("user_id", membership.user_id)
+          .eq("active", true)
+          .limit(1)
+          .maybeSingle(),
+        db.from("user_roles").select("id").eq("user_id", membership.user_id).limit(1).maybeSingle(),
+        supabaseAdmin.auth.admin.getUserById(membership.user_id),
+      ]);
+
+    if (authUser?.user) {
+      const appMetadata = { ...(authUser.user.app_metadata ?? {}) };
+      if (remainingMembership) {
+        appMetadata["transporter_access"] = true;
+        appMetadata["transporter_company_id"] = remainingMembership.transporter_company_id;
+      } else {
+        delete appMetadata["transporter_access"];
+        delete appMetadata["transporter_company_id"];
+      }
+      await supabaseAdmin.auth.admin.updateUserById(membership.user_id, {
+        app_metadata: appMetadata,
+      });
+    }
+
+    if (remainingMembership || grfRole) {
+      return { ok: true as const, accountRemoved: false as const };
+    }
+
+    const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(
+      membership.user_id,
+    );
+    return {
+      ok: true as const,
+      accountRemoved: !authDeleteError,
+      warning: authDeleteError
+        ? "O acesso foi excluído, mas a conta de login não pôde ser removida automaticamente."
+        : null,
+    };
   });
 
 export const approveTransporterAccessRequest = createServerFn({ method: "POST" })
@@ -276,7 +426,8 @@ export const approveTransporterAccessRequest = createServerFn({ method: "POST" }
   .inputValidator((input: unknown) => decisionSchema.parse(input))
   .handler(async ({ data, context }) => {
     const approver = await getApprover(context.userId);
-    if (!approver) return { ok: false as const, error: "Você não possui permissão para aprovar acessos." };
+    if (!approver)
+      return { ok: false as const, error: "Você não possui permissão para aprovar acessos." };
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
@@ -296,7 +447,10 @@ export const approveTransporterAccessRequest = createServerFn({ method: "POST" }
       .eq("user_id", request.user_id)
       .maybeSingle();
     if (grfRole) {
-      return { ok: false as const, error: "Este usuário pertence à Área GRF e não pode ser vinculado como transportador." };
+      return {
+        ok: false as const,
+        error: "Este usuário pertence à Área GRF e não pode ser vinculado como transportador.",
+      };
     }
 
     const { data: existingMembership } = await db
@@ -340,7 +494,10 @@ export const approveTransporterAccessRequest = createServerFn({ method: "POST" }
       company = { id: String(created.id), name: String(created.name), cnpj: created.cnpj ?? null };
     } else {
       if (!data.companyId) {
-        return { ok: false as const, error: "Selecione a transportadora correta antes de aprovar." };
+        return {
+          ok: false as const,
+          error: "Selecione a transportadora correta antes de aprovar.",
+        };
       }
 
       const { data: selectedCompany } = await db
@@ -366,7 +523,10 @@ export const approveTransporterAccessRequest = createServerFn({ method: "POST" }
           .update({ cnpj: request.company_cnpj, updated_at: new Date().toISOString() })
           .eq("id", selectedCompany.id);
         if (cnpjError) {
-          return { ok: false as const, error: "Não foi possível confirmar o CNPJ da transportadora selecionada." };
+          return {
+            ok: false as const,
+            error: "Não foi possível confirmar o CNPJ da transportadora selecionada.",
+          };
         }
       }
 
@@ -414,7 +574,10 @@ export const approveTransporterAccessRequest = createServerFn({ method: "POST" }
       .eq("status", "PENDING");
 
     if (updateError) {
-      return { ok: false as const, error: "Vínculo criado, mas houve falha ao atualizar a solicitação." };
+      return {
+        ok: false as const,
+        error: "Vínculo criado, mas houve falha ao atualizar a solicitação.",
+      };
     }
 
     return { ok: true as const, companyId: company.id, companyName: company.name };
@@ -425,7 +588,8 @@ export const rejectTransporterAccessRequest = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => decisionSchema.parse(input))
   .handler(async ({ data, context }) => {
     const approver = await getApprover(context.userId);
-    if (!approver) return { ok: false as const, error: "Você não possui permissão para reprovar acessos." };
+    if (!approver)
+      return { ok: false as const, error: "Você não possui permissão para reprovar acessos." };
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
@@ -454,7 +618,12 @@ export const rejectTransporterAccessRequest = createServerFn({ method: "POST" })
 
     const [{ data: role }, { data: membership }] = await Promise.all([
       db.from("user_roles").select("id").eq("user_id", request.user_id).maybeSingle(),
-      db.from("transporter_memberships").select("id").eq("user_id", request.user_id).eq("active", true).maybeSingle(),
+      db
+        .from("transporter_memberships")
+        .select("id")
+        .eq("user_id", request.user_id)
+        .eq("active", true)
+        .maybeSingle(),
     ]);
 
     if (!role && !membership) {

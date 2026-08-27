@@ -104,3 +104,30 @@ export const firstAdminSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
 });
+
+/**
+ * Nome da transportadora a gravar no cadastro mestre do veículo.
+ *
+ * Para veículo que veio do Sankhya, o `transporter_name` não é um rótulo
+ * qualquer: é ele que identifica a OPERAÇÃO. A TRANSGARRA, por exemplo, tem o
+ * mesmo CNPJ em duas operações que precisam de disponibilidade separada, e
+ * quem as distingue é justamente o nome — "TRANSGARRA" (Três Rios) e
+ * "TRANSGARRA RIO" (Penha).
+ *
+ * O complemento e a correção de cadastro gravam a razão social digitada no
+ * formulário. Sobrescrever o nome do Sankhya com ela apaga a operação, e o
+ * gatilho `sync_vehicle_transporter_company` reage a essa troca movendo o
+ * veículo para outra empresa — foi o que tirou 18 carros da Penha e deixou 11
+ * da VISÃO numa empresa sem acesso.
+ *
+ * Por isso: veículo do Sankhya mantém o nome que já tem; veículo novo, que não
+ * carrega operação nenhuma, recebe normalmente o nome informado no cadastro.
+ */
+export function resolveVehicleTransporterName(
+  master: { sankhya_registered?: unknown; transporter_name?: unknown } | null | undefined,
+  submittedName: string,
+): string {
+  const current = typeof master?.transporter_name === "string" ? master.transporter_name.trim() : "";
+  const fromSankhya = master?.sankhya_registered === true;
+  return fromSankhya && current.length > 0 ? current : submittedName;
+}

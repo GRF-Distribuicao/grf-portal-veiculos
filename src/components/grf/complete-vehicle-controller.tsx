@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { isTransgarra, isOperationBase, knownOperationBase } from "@/lib/grf-operation-base";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -66,6 +67,7 @@ export function CompleteVehicleController() {
         setForm((current) => ({
           ...current,
           plate: v.plate,
+          operationBase: knownOperationBase(v.supportPoint),
           transporterName: v.transporterName ?? "",
           brandModel: v.model ?? "",
           bodyType: v.bodyType ?? "",
@@ -125,6 +127,7 @@ export function CompleteVehicleController() {
 
   function validate() {
     const e: Record<string, string> = {};
+    if (isTransgarra(form.docNumber) && !isOperationBase(form.operationBase)) e['operationBase'] = "Selecione a base de operação da Transgarra.";
     if (form.transporterName.trim().length < 3) e.transporterName = "Informe o responsável / transportador.";
     if (!isValidDoc(form.docNumber)) e.docNumber = "CPF/CNPJ inválido.";
     if (!isValidPhone(form.phone)) e.phone = "Telefone inválido.";
@@ -168,6 +171,7 @@ export function CompleteVehicleController() {
     setSending(true);
     try {
       const result = await complete({ data: {
+        operationBase: isTransgarra(form.docNumber) && isOperationBase(form.operationBase) ? form.operationBase : null,
         transporter: { name: form.transporterName.trim(), docType: onlyDigits(form.docNumber).length === 11 ? "CPF" : "CNPJ", docNumber: form.docNumber, phone: form.phone, email: form.email.trim() || null, city: form.city.trim(), uf: form.uf, linkType: form.linkType },
         vehicle: { plate: form.plate, brandModel: form.brandModel.trim(), bodyType: form.bodyType || null, pbtKg: num(form.pbtKg)!, tareKg: num(form.tareKg)!, lotacaoKg: num(form.lotacaoKg)!, pallets: Math.trunc(num(form.pallets)!), renavam: form.renavam.trim(), chassis: form.chassis.trim().toUpperCase(), rntrc: form.rntrc.trim(), bodyWidthM: num(form.bodyWidthM)!, bodyHeightM: num(form.bodyHeightM)!, bodyLengthM: num(form.bodyLengthM)!, tollTagNumber: form.tollTagNumber.trim() || null, tollTagCompany: form.tollTagCompany.trim() || null, tollTagOwned: form.tollTagOwned === "sim", grfSticker: form.grfSticker === "sim", hasMonitoringCamera: form.hasMonitoringCamera === "sim" },
         driver: { name: form.driverName.trim(), cpf: form.driverCpf, cnh: form.driverCnh.trim(), cnhCategory: form.driverCategory, phone: form.driverPhone },

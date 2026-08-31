@@ -32,6 +32,7 @@ export const uploadTicketSchema = z.object({
 });
 
 export const decisionInputSchema = z.object({
+  operationBase: z.enum(["PENHA", "CD TRÊS RIOS"]).nullable().optional(),
   id: z.string().uuid(),
   action: z.enum(["EM_ANALISE", "APROVAR", "DEVOLVER", "REPROVAR", "PRONTO_INTEGRACAO"]),
   userName: z.string().min(2),
@@ -39,6 +40,7 @@ export const decisionInputSchema = z.object({
 });
 
 export const submitInputSchema = z.object({
+  operationBase: z.enum(["PENHA", "CD TRÊS RIOS"]).nullable().optional(),
   transporter: z.object({
     name: z.string().min(3),
     docType: z.string(),

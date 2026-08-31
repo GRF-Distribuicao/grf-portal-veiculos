@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { isTransgarra, isOperationBase } from "@/lib/grf-operation-base";
 import { z } from "zod";
 import { ATTACHMENT_TYPES } from "@/lib/grf-domain";
 import { resolveVehicleTransporterName } from "@/lib/grf-server-helpers";
@@ -13,6 +14,7 @@ const registrationSchema = authSchema.extend({
 });
 
 const correctionSchema = registrationSchema.extend({
+  operationBase: z.enum(["PENHA", "CD TRÊS RIOS"]).nullable().optional(),
   transporter: z.object({
     name: z.string().min(3),
     docType: z.string(),
@@ -244,6 +246,9 @@ export const resubmitReturnedCorrection = createServerFn({ method: "POST" })
     }
 
     const now = new Date().toISOString();
+    if (isTransgarra(data.transporter.docNumber) && registration.operation_base_required && !isOperationBase(data.operationBase)) {
+      return { ok: false as const, error: "Selecione a base de operação da Transgarra." };
+    }
 
     const { error: transporterError } = await ctx.db
       .from("transporters")
@@ -264,6 +269,7 @@ export const resubmitReturnedCorrection = createServerFn({ method: "POST" })
       .from("vehicle_registrations")
       .update({
         status: "AGUARDANDO_ANALISE",
+        operation_base: isTransgarra(data.transporter.docNumber) ? data.operationBase ?? registration.operation_base : null,
         vehicle_type: data.vehicle.vehicleType || null,
         species: data.vehicle.species || null,
         wheel_type: data.vehicle.wheelType || null,
@@ -339,7 +345,7 @@ export const resubmitReturnedCorrection = createServerFn({ method: "POST" })
         .update({
           completion_status: "EM_ANALISE",
           // Veículo do Sankhya mantém o nome operacional; ver resolveVehicleTransporterName.
-          transporter_name: resolveVehicleTransporterName(master, data.transporter.name),
+          transporter_name: isTransgarra(data.transporter.docNumber) ? master?.transporter_name : resolveVehicleTransporterName(master, data.transporter.name),
           driver_name: data.driver.name,
           brand_model: data.vehicle.brandModel,
           vehicle_type: data.vehicle.vehicleType || null,

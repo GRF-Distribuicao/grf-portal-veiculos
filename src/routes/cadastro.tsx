@@ -1,4 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { OperationBaseField } from "@/components/grf/operation-base-field";
+import { isTransgarra, isOperationBase, operationBaseLabel } from "@/lib/grf-operation-base";
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -98,6 +100,7 @@ type UploadedDoc = {
 };
 
 const empty = {
+  operationBase: "",
   name: "", docNumber: "", phone: "", email: "", city: "", uf: "", linkType: "",
   plate: "", vehicleType: "", species: "", wheelType: "", bodyType: "", brandModel: "",
   manufactureYear: "", modelYear: "", maxWeightKg: "", tareKg: "", maxCapacityKg: "",
@@ -132,6 +135,7 @@ function Cadastro() {
   async function validateStep(current: number) {
     const e: Record<string, string> = {};
     if (current === 0) {
+      if (isTransgarra(form.docNumber) && !isOperationBase(form.operationBase)) e['operationBase'] = "Selecione a base de operação da Transgarra.";
       if (form.name.trim().length < 3) e['name'] = "Informe o nome ou razão social.";
       if (!isValidDoc(form.docNumber)) e['docNumber'] = "CPF/CNPJ inválido.";
       if (!isValidPhone(form.phone)) e['phone'] = "Telefone inválido.";
@@ -269,6 +273,7 @@ function Cadastro() {
     try {
       const res = await submit({
         data: {
+          operationBase: isTransgarra(form.docNumber) && isOperationBase(form.operationBase) ? form.operationBase : null,
           transporter: {
             name: form.name.trim(),
             docType: onlyDigits(form.docNumber).length === 11 ? "CPF" : "CNPJ",
@@ -430,6 +435,7 @@ function Cadastro() {
               <Field label="Tipo de vínculo" required error={errors['linkType']}>
                 <SelectBox value={form.linkType} onChange={(v) => set("linkType", v)} options={LINK_TYPES} placeholder="Selecione" />
               </Field>
+              {isTransgarra(form.docNumber) && <OperationBaseField value={form.operationBase} onChange={(v) => set("operationBase", v)} error={errors['operationBase']} />}
             </div>
           )}
 
@@ -607,6 +613,7 @@ function Cadastro() {
                   <ReviewRow label="Contato" value={`${form.phone} · ${form.email}`} />
                   <ReviewRow label="Cidade / UF" value={`${form.city} / ${form.uf}`} />
                   <ReviewRow label="Vínculo" value={form.linkType} />
+                  {isTransgarra(form.docNumber) && <ReviewRow label="Base de operação" value={operationBaseLabel(form.operationBase)} />}
                 </div>
               </section>
               <section>
@@ -888,4 +895,3 @@ function YesNo({ value, onChange, name }: { value: string; onChange: (v: string)
     </RadioGroup>
   );
 }
-

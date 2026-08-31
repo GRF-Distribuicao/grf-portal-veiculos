@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { isTransgarra, isOperationBase, knownOperationBase } from "@/lib/grf-operation-base";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertCircle, ArrowLeft, CheckCircle2, Copy, Loader2, RotateCcw } from "lucide-react";
@@ -46,6 +47,7 @@ function TransporterCorrectionPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [returnNote, setReturnNote] = useState<string | null>(null);
   const [form, setForm] = useState<CompletionFormState>(completionEmpty);
+  const [requireOperationBase, setRequireOperationBase] = useState(false);
   const [docs, setDocs] = useState<Record<string, UploadedDoc>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [declaration, setDeclaration] = useState(false);
@@ -88,6 +90,7 @@ function TransporterCorrectionPage() {
       setReturnNote(result.returnNote);
 
       const reg = result.registration as any;
+      setRequireOperationBase(reg.operation_base_required === true);
       const transporter = (result.transporter ?? {}) as any;
       const driver = (result.driver ?? {}) as any;
       const tracking = (result.tracking ?? {}) as any;
@@ -95,6 +98,7 @@ function TransporterCorrectionPage() {
 
       setForm({
         ...completionEmpty,
+        operationBase: knownOperationBase(reg.operation_base ?? master.support_point),
         plate: formatPlate(text(reg.plate)),
         transporterName: text(transporter.name),
         docNumber: text(transporter.doc_number),
@@ -220,6 +224,7 @@ function TransporterCorrectionPage() {
 
   function validate() {
     const e: Record<string, string> = {};
+    if (requireOperationBase && isTransgarra(form.docNumber) && !isOperationBase(form.operationBase)) e['operationBase'] = "Selecione a base de operação da Transgarra.";
     if (form.transporterName.trim().length < 3) e.transporterName = "Informe o responsável / transportador.";
     if (!isValidDoc(form.docNumber)) e.docNumber = "CPF/CNPJ inválido.";
     if (!isValidPhone(form.phone)) e.phone = "Telefone inválido.";
@@ -267,6 +272,7 @@ function TransporterCorrectionPage() {
         data: {
           accessToken,
           registrationId,
+          operationBase: isTransgarra(form.docNumber) && isOperationBase(form.operationBase) ? form.operationBase : null,
           transporter: {
             name: form.transporterName.trim(),
             docType: onlyDigits(form.docNumber).length === 11 ? "CPF" : "CNPJ",
@@ -399,7 +405,7 @@ function TransporterCorrectionPage() {
               </div>
             </section>
 
-            <CompletionSections form={form} set={set} errors={errors} showApprovalFields />
+            <CompletionSections form={form} set={set} errors={errors} showApprovalFields requireOperationBase={requireOperationBase} />
             <CompletionAttachments docs={docs} errors={errors} onPick={(att, file) => void handleFile(att, file)} onRemove={dropDoc} />
 
             <section className={errors.declaration ? "rounded-xl border border-destructive/60 bg-destructive/5 p-5" : "rounded-xl border border-border bg-card p-5"}>

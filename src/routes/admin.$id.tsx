@@ -1,4 +1,6 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
+import { OperationBaseField } from "@/components/grf/operation-base-field";
+import { isTransgarra, isOperationBase, operationBaseLabel } from "@/lib/grf-operation-base";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -54,6 +56,7 @@ function AdminDetail() {
   const [userName, setUserName] = useState("Equipe GRF");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [baseSelection, setBaseSelection] = useState<{ id: string; value: string } | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["registration", id],
@@ -67,7 +70,8 @@ function AdminDetail() {
     }
     setBusy(true);
     try {
-      const res = await decide({ data: { id, action, userName, note } });
+      const selectedBase = baseSelection?.id === id ? baseSelection.value : data?.ok ? data.registration.operation_base : null;
+      const res = await decide({ data: { id, action, userName, note, operationBase: isOperationBase(selectedBase) ? selectedBase : null } });
       if (!res.ok) {
         toast.error(res.error);
         return;
@@ -75,6 +79,8 @@ function AdminDetail() {
       toast.success(`Cadastro atualizado: ${STATUS_LABEL[res.status]}`);
       setNote("");
       await qc.invalidateQueries();
+    } catch {
+      toast.error("Não foi possível confirmar a decisão. Recarregue o cadastro e verifique o status antes de tentar novamente.");
     } finally {
       setBusy(false);
     }
@@ -126,6 +132,7 @@ function AdminDetail() {
             <ReviewRow label="E-mail" value={s(t?.['email'])} />
             <ReviewRow label="Cidade / UF" value={`${s(t?.['city'])} / ${s(t?.['uf'])}`} />
             <ReviewRow label="Vínculo" value={s(t?.['link_type'])} />
+            {isTransgarra(String(t?.['doc_number'] ?? "")) && <ReviewRow label="Base de operação" value={operationBaseLabel(reg['operation_base'])} />}
           </Card>
 
           <Card title="Veículo">
@@ -233,6 +240,11 @@ function AdminDetail() {
           <div className="rounded-lg border border-border bg-card p-5">
             <h2 className="text-sm font-bold">Decisão da GRF</h2>
             <div className="mt-3 space-y-3">
+              {isTransgarra(String(t?.['doc_number'] ?? "")) && <>
+                <OperationBaseField value={baseSelection?.id === id ? baseSelection.value : String(reg['operation_base'] ?? "")}
+                  onChange={(value) => setBaseSelection({ id, value })} required={reg['operation_base_required'] === true} disabled={busy} />
+                <p className="text-xs text-muted-foreground">A base é confirmada ao aprovar. Vínculos já existentes não serão transferidos.</p>
+              </>}
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold text-muted-foreground uppercase">Analista</Label>
                 <Input value={userName} onChange={(e) => setUserName(e.target.value)} />

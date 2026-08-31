@@ -240,6 +240,8 @@ export type Database = {
       }
       vehicle_registrations: {
         Row: {
+          operation_base: string | null
+          operation_base_required: boolean
           axles: number | null
           body_type: string | null
           brand_model: string | null
@@ -275,6 +277,8 @@ export type Database = {
           wheel_type: string | null
         }
         Insert: {
+          operation_base?: string | null
+          operation_base_required?: boolean
           axles?: number | null
           body_type?: string | null
           brand_model?: string | null
@@ -310,6 +314,8 @@ export type Database = {
           wheel_type?: string | null
         }
         Update: {
+          operation_base?: string | null
+          operation_base_required?: boolean
           axles?: number | null
           body_type?: string | null
           brand_model?: string | null

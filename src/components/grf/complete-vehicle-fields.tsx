@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { OperationBaseField } from "@/components/grf/operation-base-field";
+import { isTransgarra } from "@/lib/grf-operation-base";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, Search } from "lucide-react";
 import { Field } from "@/components/grf/field";
@@ -25,6 +27,7 @@ import {
 } from "@/lib/grf-domain";
 
 export const completionEmpty = {
+  operationBase: "",
   plate: "", transporterName: "", docNumber: "", phone: "", email: "", city: "", uf: "", linkType: "",
   brandModel: "", vehicleType: "", species: "", wheelType: "", bodyType: "", manufactureYear: "", modelYear: "",
   pbtKg: "", tareKg: "", lotacaoKg: "", pallets: "", axles: "", renavam: "", chassis: "", engineNumber: "",
@@ -44,11 +47,13 @@ export function CompletionSections({
   set,
   errors,
   showApprovalFields = false,
+  requireOperationBase = true,
 }: {
   form: CompletionFormState;
   set: SetCompletionField;
   errors: Record<string, string>;
   showApprovalFields?: boolean;
+  requireOperationBase?: boolean;
 }) {
   const companyVehicle = form.linkType === "Frota própria";
   const lookupCnpj = useServerFn(lookupTransporterCnpj);
@@ -135,6 +140,7 @@ export function CompletionSections({
             )}
           </Field>
           <Field label="Nome / Razão social" required error={errors.transporterName} className="sm:col-span-2"><Input value={form.transporterName} onChange={(e) => set("transporterName", e.target.value)} /></Field>
+          {isTransgarra(form.docNumber) && <div className="sm:col-span-2"><OperationBaseField value={form.operationBase} onChange={(v) => set("operationBase", v)} error={errors['operationBase']} required={requireOperationBase} /></div>}
           <Field label="Telefone" required error={errors.phone}><Input value={form.phone} onChange={(e) => set("phone", formatPhone(e.target.value))} /></Field>
           <Field label="E-mail" hint="Opcional."><Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} /></Field>
           <Field label="Cidade" required error={errors.city}><Input value={form.city} onChange={(e) => set("city", e.target.value)} /></Field>

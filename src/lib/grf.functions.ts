@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { isTransgarra, isOperationBase, operationBaseLabel } from "@/lib/grf-operation-base";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
   decisionInputSchema,
@@ -88,6 +89,9 @@ export const submitRegistration = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const plate = data.vehicle.plate.toUpperCase();
+    if (isTransgarra(data.transporter.docNumber) && !isOperationBase(data.operationBase)) {
+      return { ok: false as const, error: "Selecione a base de operação da Transgarra." };
+    }
 
     // Reforço no servidor: o formulário do navegador pode ser burlado.
     const sent = new Set(data.documents.map((d) => d.docType));
@@ -133,6 +137,8 @@ export const submitRegistration = createServerFn({ method: "POST" })
       .insert({
         protocol,
         transporter_id: transporter.id,
+        operation_base: isTransgarra(data.transporter.docNumber) ? data.operationBase ?? null : null,
+        operation_base_required: isTransgarra(data.transporter.docNumber),
         status: "AGUARDANDO_ANALISE",
         plate,
         vehicle_type: data.vehicle.vehicleType,
@@ -391,10 +397,18 @@ export const decideRegistration = createServerFn({ method: "POST" })
     await assertGrfUser(context.userId);
     const { data: current } = await supabaseAdmin
       .from("vehicle_registrations")
-      .select("status")
+      .select("status, operation_base, operation_base_required, transporters(doc_number)")
       .eq("id", data.id)
       .maybeSingle();
     if (!current) return { ok: false as const, error: "Cadastro não encontrado." };
+
+    const transporter = current.transporters as unknown as { doc_number: string } | null;
+    const transgarra = isTransgarra(transporter?.doc_number);
+    const operationBase = transgarra ? data.operationBase ?? current.operation_base : null;
+    const approving = data.action === "APROVAR" || data.action === "PRONTO_INTEGRACAO";
+    if (approving && transgarra && current.operation_base_required && !isOperationBase(operationBase)) {
+      return { ok: false as const, error: "Selecione a base de operação da Transgarra antes de aprovar." };
+    }
 
     const map: Record<string, string> = {
       EM_ANALISE: "EM_ANALISE",
@@ -409,15 +423,22 @@ export const decideRegistration = createServerFn({ method: "POST" })
       return { ok: false as const, error: "Informe uma observação para devolver ou reprovar." };
     }
 
-    await supabaseAdmin
+    const { error: decisionError } = await supabaseAdmin
       .from("vehicle_registrations")
       .update({
         status: to,
+        ...(approving && transgarra ? { operation_base: operationBase } : {}),
         status_integracao: to === "PRONTO_INTEGRACAO" ? "AGUARDANDO_ENVIO" : "NAO_INICIADA",
         mensagem_integracao:
           to === "PRONTO_INTEGRACAO" ? "Aguardando conexão real com o Sankhya (próxima etapa)." : null,
       })
       .eq("id", data.id);
+
+    if (decisionError) {
+      console.error("[GRF] Falha na decisão de cadastro", decisionError.code);
+      return { ok: false as const, error: decisionError.message.startsWith("Base Transgarra:")
+        ? decisionError.message : "Não foi possível salvar a decisão. O cadastro não foi aprovado; tente novamente." };
+    }
 
     await supabaseAdmin.from("approval_history").insert({
       registration_id: data.id,
@@ -425,7 +446,7 @@ export const decideRegistration = createServerFn({ method: "POST" })
       from_status: current.status,
       to_status: to,
       user_name: data.userName,
-      note: data.note?.trim() || null,
+      note: [data.note?.trim(), approving && transgarra && operationBase ? `Base confirmada pela GRF: ${operationBaseLabel(operationBase)}.` : ""].filter(Boolean).join("\n") || null,
     });
 
     return { ok: true as const, status: to };

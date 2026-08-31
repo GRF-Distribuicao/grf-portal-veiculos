@@ -1,9 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
+import { isTransgarra, isOperationBase } from "@/lib/grf-operation-base";
 import { z } from "zod";
 import { ATTACHMENT_TYPES } from "@/lib/grf-domain";
 import { makeProtocol, resolveVehicleTransporterName } from "@/lib/grf-server-helpers";
 
 const completeVehicleSchema = z.object({
+  operationBase: z.enum(["PENHA", "CD TRÊS RIOS"]).nullable().optional(),
   transporter: z.object({
     name: z.string().min(3),
     docType: z.string(),
@@ -65,6 +67,9 @@ export const completeExistingVehicle = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
     const plate = data.vehicle.plate.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+    if (isTransgarra(data.transporter.docNumber) && !isOperationBase(data.operationBase)) {
+      return { ok: false as const, error: "Selecione a base de operação da Transgarra." };
+    }
 
     if (!data.declarationAccepted) {
       return { ok: false as const, error: "Confirme a declaração de veracidade antes de enviar." };
@@ -131,6 +136,8 @@ export const completeExistingVehicle = createServerFn({ method: "POST" })
         protocol,
         transporter_id: transporter.id,
         vehicle_id: master.id,
+        operation_base: isTransgarra(data.transporter.docNumber) ? data.operationBase : null,
+        operation_base_required: isTransgarra(data.transporter.docNumber),
         status: "AGUARDANDO_ANALISE",
         plate,
         vehicle_type: master.vehicle_type,
@@ -205,7 +212,8 @@ export const completeExistingVehicle = createServerFn({ method: "POST" })
       .update({
         completion_status: "EM_ANALISE",
         // Veículo do Sankhya mantém o nome operacional; ver resolveVehicleTransporterName.
-        transporter_name: resolveVehicleTransporterName(master, data.transporter.name),
+        // A nova operação Transgarra só é vinculada após aprovação da GRF.
+        transporter_name: isTransgarra(data.transporter.docNumber) ? master.transporter_name : resolveVehicleTransporterName(master, data.transporter.name),
         driver_name: data.driver.name,
         brand_model: data.vehicle.brandModel,
         body_type: data.vehicle.bodyType || master.body_type,

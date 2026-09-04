@@ -442,6 +442,8 @@ export interface FleetEntry {
   capKg: number | null;
   /** Posições-palete — usadas na ocupação de TRANSBORDO. */
   capPaletes: number | null;
+  /** Modelo operacional — usado somente nas visões de DISTRIBUIÇÃO. */
+  modelo: string | null;
   tipoVeic: string | null;
   transportadora: string | null;
 }
@@ -494,7 +496,9 @@ export async function loadFleetCapacity(): Promise<FleetResult> {
   for (let offset = 0; ; offset += READ_PAGE_SIZE) {
     const { data, error } = await db
       .from("vehicles")
-      .select("plate, lotacao_kg, max_capacity_kg, pallets, vehicle_type, transporter_name")
+      .select(
+        "plate, lotacao_kg, max_capacity_kg, pallets, brand_model, vehicle_type, transporter_name",
+      )
       .order("plate", { ascending: true })
       .range(offset, offset + READ_PAGE_SIZE - 1);
 
@@ -515,6 +519,10 @@ export async function loadFleetCapacity(): Promise<FleetResult> {
       fleet[plate] = {
         capKg,
         capPaletes,
+        modelo:
+          typeof row["brand_model"] === "string" && row["brand_model"].trim()
+            ? row["brand_model"].trim()
+            : null,
         tipoVeic: typeof row["vehicle_type"] === "string" ? row["vehicle_type"] : null,
         transportadora: typeof row["transporter_name"] === "string" ? row["transporter_name"] : null,
       };

@@ -90,6 +90,7 @@ function AdminDetail() {
   if (!data?.ok) return <main className="mx-auto max-w-5xl p-8 text-sm">Cadastro não encontrado.</main>;
 
   const reg = data.registration as AnyRec;
+  const master = (data.vehicleMaster ?? {}) as AnyRec;
   const t = reg['transporters'] as AnyRec;
   const driver = ((reg['drivers'] as AnyRec[]) ?? [])[0] ?? {};
   const tracker = ((reg['tracking_devices'] as AnyRec[]) ?? [])[0] ?? {};
@@ -142,6 +143,7 @@ function AdminDetail() {
             <ReviewRow label="Ano fab. / modelo" value={`${s(reg['manufacture_year'])} / ${s(reg['model_year'])}`} />
             <ReviewRow label="Peso máx. / tara" value={`${s(reg['max_weight_kg'])} kg / ${s(reg['tare_kg'])} kg`} />
             <ReviewRow label="Capacidade / pallets / eixos" value={`${s(reg['max_capacity_kg'])} kg · ${s(reg['pallets'])} · ${s(reg['axles'])}`} />
+            <ReviewRow label="Largura / altura / comprimento" value={`${s(master['body_width_m'])} m · ${s(master['body_height_m'])} m · ${s(master['body_length_m'])} m`} />
             <ReviewRow label="RENAVAM" value={s(reg['renavam'])} />
             <ReviewRow label="Chassi" value={s(reg['chassis'])} />
             <ReviewRow label="Motor" value={s(reg['engine_number'])} />

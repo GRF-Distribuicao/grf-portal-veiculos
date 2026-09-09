@@ -88,6 +88,7 @@ export const submitRegistration = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => submitInputSchema.parse(d))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
     const plate = data.vehicle.plate.toUpperCase();
     if (isTransgarra(data.transporter.docNumber) && !isOperationBase(data.operationBase)) {
       return { ok: false as const, error: "Selecione a base de operação da Transgarra." };
@@ -132,7 +133,7 @@ export const submitRegistration = createServerFn({ method: "POST" })
     if (tErr || !transporter) return { ok: false as const, error: "Falha ao salvar o transportador." };
 
     const protocol = makeProtocol();
-    const { data: reg, error: rErr } = await supabaseAdmin
+    const { data: reg, error: rErr } = await db
       .from("vehicle_registrations")
       .insert({
         protocol,
@@ -163,9 +164,27 @@ export const submitRegistration = createServerFn({ method: "POST" })
         company_vehicle: data.vehicle.companyVehicle,
         declaration_accepted: data.declarationAccepted,
       })
-      .select("id, protocol")
+      .select("id, protocol, vehicle_id")
       .single();
     if (rErr || !reg) return { ok: false as const, error: "Falha ao salvar o cadastro do veículo." };
+
+    // O vínculo é criado pelo gatilho do cadastro; as medidas ficam somente
+    // no cadastro mestre, que é a fonte também para a área de aprovação.
+    if (!reg.vehicle_id) {
+      return { ok: false as const, error: "Falha ao vincular o veículo ao cadastro mestre." };
+    }
+    const { error: dimensionsError } = await db
+      .from("vehicles")
+      .update({
+        body_width_m: data.vehicle.bodyWidthM,
+        body_height_m: data.vehicle.bodyHeightM,
+        body_length_m: data.vehicle.bodyLengthM,
+      })
+      .eq("id", reg.vehicle_id);
+    if (dimensionsError) {
+      console.error("[GRF] Falha ao salvar medidas do veículo", dimensionsError.code);
+      return { ok: false as const, error: "Falha ao salvar as medidas do veículo. Tente novamente." };
+    }
 
     await supabaseAdmin.from("drivers").insert({
       registration_id: reg.id,
@@ -360,14 +379,23 @@ export const getRegistration = createServerFn({ method: "POST" })
   .inputValidator((d: { id: string }) => registrationIdSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
     const { assertGrfUser } = await import("@/lib/grf-auth.server");
     await assertGrfUser(context.userId);
-    const { data: reg } = await supabaseAdmin
+    const { data: reg } = await db
       .from("vehicle_registrations")
       .select("*, transporters(*), drivers(*), tracking_devices(*), documents(*)")
       .eq("id", data.id)
       .maybeSingle();
     if (!reg) return { ok: false as const };
+
+    const { data: vehicleMaster } = reg.vehicle_id
+      ? await db
+          .from("vehicles")
+          .select("body_width_m, body_height_m, body_length_m")
+          .eq("id", reg.vehicle_id)
+          .maybeSingle()
+      : { data: null };
 
     const docs = (reg.documents ?? []) as Array<{ id: string; storage_path: string; [k: string]: unknown }>;
     const withUrls = await Promise.all(
@@ -385,7 +413,12 @@ export const getRegistration = createServerFn({ method: "POST" })
       .eq("registration_id", data.id)
       .order("created_at", { ascending: false });
 
-    return { ok: true as const, registration: { ...reg, documents: withUrls }, history: history ?? [] };
+    return {
+      ok: true as const,
+      registration: { ...reg, documents: withUrls },
+      vehicleMaster,
+      history: history ?? [],
+    };
   });
 
 export const decideRegistration = createServerFn({ method: "POST" })

@@ -104,6 +104,7 @@ const empty = {
   name: "", docNumber: "", phone: "", email: "", city: "", uf: "", linkType: "",
   plate: "", vehicleType: "", species: "", wheelType: "", bodyType: "", brandModel: "",
   manufactureYear: "", modelYear: "", maxWeightKg: "", tareKg: "", maxCapacityKg: "",
+  bodyWidthM: "", bodyHeightM: "", bodyLengthM: "",
   pallets: "", axles: "", renavam: "", chassis: "", engineNumber: "", plateCity: "",
   plateUf: "", color: "", fuel: "", companyVehicle: "nao",
   driverName: "", driverCpf: "", driverCnh: "", driverCategory: "", driverPhone: "",
@@ -147,6 +148,9 @@ function Cadastro() {
     if (current === 1) {
       if (!isValidPlate(form.plate)) e['plate'] = "Placa inválida (padrão ABC1234 ou ABC1D23).";
       if (!form.maxCapacityKg) e['maxCapacityKg'] = "Informe a capacidade de carga em kg.";
+      if (!num(form.bodyWidthM)) e['bodyWidthM'] = "Informe a largura em metros.";
+      if (!num(form.bodyHeightM)) e['bodyHeightM'] = "Informe a altura em metros.";
+      if (!num(form.bodyLengthM)) e['bodyLengthM'] = "Informe o comprimento em metros.";
       if (!form.pallets) e['pallets'] = "Informe a quantidade de pallets.";
       if (!form.brandModel.trim()) e['brandModel'] = "Informe marca/modelo.";
       if (!form.renavam.trim()) e['renavam'] = "Informe o RENAVAM.";
@@ -296,6 +300,9 @@ function Cadastro() {
             maxWeightKg: num(form.maxWeightKg),
             tareKg: num(form.tareKg),
             maxCapacityKg: num(form.maxCapacityKg),
+            bodyWidthM: num(form.bodyWidthM),
+            bodyHeightM: num(form.bodyHeightM),
+            bodyLengthM: num(form.bodyLengthM),
             pallets: num(form.pallets),
             axles: num(form.axles),
             renavam: form.renavam || null,
@@ -478,6 +485,15 @@ function Cadastro() {
               </Field>
               <Field label="Capacidade de carga (kg)" required error={errors['maxCapacityKg']}>
                 <Input inputMode="numeric" value={form.maxCapacityKg} onChange={(e) => set("maxCapacityKg", e.target.value.replace(/\D/g, ""))} />
+              </Field>
+              <Field label="Largura (m)" required error={errors['bodyWidthM']}>
+                <Input inputMode="decimal" value={form.bodyWidthM} onChange={(e) => set("bodyWidthM", e.target.value.replace(/[^0-9,.]/g, ""))} placeholder="2,40" />
+              </Field>
+              <Field label="Altura (m)" required error={errors['bodyHeightM']}>
+                <Input inputMode="decimal" value={form.bodyHeightM} onChange={(e) => set("bodyHeightM", e.target.value.replace(/[^0-9,.]/g, ""))} placeholder="2,60" />
+              </Field>
+              <Field label="Comprimento (m)" required error={errors['bodyLengthM']}>
+                <Input inputMode="decimal" value={form.bodyLengthM} onChange={(e) => set("bodyLengthM", e.target.value.replace(/[^0-9,.]/g, ""))} placeholder="8,50" />
               </Field>
               <Field label="Quantidade de pallets" required error={errors['pallets']}>
                 <Input inputMode="numeric" value={form.pallets} onChange={(e) => set("pallets", e.target.value.replace(/\D/g, ""))} />

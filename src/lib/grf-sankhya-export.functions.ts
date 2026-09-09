@@ -15,7 +15,7 @@ export const exportSankhyaQueue = createServerFn({ method: "POST" })
     for (let from = 0; ; from += pageSize) {
       const { data, error } = await supabaseAdmin
         .from("vehicle_registrations")
-        .select("*, transporters(*), drivers(*), tracking_devices(*), documents(doc_type, file_name, file_size, mime_type, status, created_at)")
+        .select("*, transporters(*), drivers(*), tracking_devices(*), vehicles!vehicle_registrations_vehicle_id_fkey(rntrc, toll_tag_number, toll_tag_company, toll_tag_owned, body_width_m, body_height_m, body_length_m, pbt_kg, lotacao_kg, operation, support_point, completion_status, fleet_status, sankhya_registered), documents(doc_type, file_name, file_size, mime_type, status, created_at)")
         .eq("status", "PRONTO_INTEGRACAO")
         .order("id", { ascending: true })
         .range(from, from + pageSize - 1);

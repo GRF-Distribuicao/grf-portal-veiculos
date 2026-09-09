@@ -24,6 +24,18 @@ const transporterFields: Field[] = [
   ["phone", "Telefone da transportadora"], ["email", "E-mail da transportadora"],
   ["city", "Cidade da transportadora"], ["uf", "UF da transportadora"], ["link_type", "Vínculo"],
 ];
+// Estes campos são gravados pelo formulário de complemento apenas em vehicles.
+const masterFields: Field[] = [
+  ["body_width_m", "Largura da carroceria (m)"],
+  ["body_height_m", "Altura da carroceria (m)"],
+  ["body_length_m", "Comprimento da carroceria (m)"],
+  ["rntrc", "ANTT / RNTRC"], ["toll_tag_number", "Número da tag de pedágio"],
+  ["toll_tag_company", "Empresa da tag de pedágio"], ["toll_tag_owned", "Tag de pedágio própria"],
+  ["pbt_kg", "PBT do cadastro mestre (kg)"], ["lotacao_kg", "Lotação do cadastro mestre (kg)"],
+  ["operation", "Operação do cadastro mestre"], ["support_point", "Ponto de apoio"],
+  ["completion_status", "Status de complementação"], ["fleet_status", "Status da frota"],
+  ["sankhya_registered", "Cadastrado no Sankhya"],
+];
 const driverFields: Field[] = [
   ["name", "Motorista"], ["cpf", "CPF do motorista"], ["cnh", "CNH"],
   ["cnh_category", "Categoria CNH"], ["phone", "Telefone do motorista"],
@@ -52,11 +64,12 @@ export function buildSankhyaWorkbook(rows: Row[]) {
     sheet["!autofilter"] = { ref: sheet["!ref"]! };
     XLSX.utils.book_append_sheet(book, sheet, name);
   };
-  addSheet("Veículos", [...vehicleFields, ...transporterFields, ...driverFields, ...trackingFields].map(([, label]) => label),
+  addSheet("Veículos", [...vehicleFields, ...transporterFields, ...driverFields, ...trackingFields, ...masterFields].map(([, label]) => label),
     rows.map((row) => [
       ...fields(row, vehicleFields), ...fields(related(row["transporters"])[0] ?? {}, transporterFields),
       ...driverFields.map(([key]) => related(row["drivers"]).map((d) => cell(d[key])).join(" | ")),
       ...trackingFields.map(([key]) => related(row["tracking_devices"]).map((t) => cell(t[key])).join(" | ")),
+      ...fields(related(row["vehicles"])[0] ?? {}, masterFields),
     ]));
   addSheet("Anexos", ["Protocolo", "Placa", ...documentFields.map(([, label]) => label)],
     rows.flatMap((row) => related(row["documents"]).map((doc) => [cell(row["protocol"]), cell(row["plate"]), ...fields(doc, documentFields)])));

@@ -1,8 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { isTransgarra, isOperationBase } from "@/lib/grf-operation-base";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const requestSchema = z.object({
+  operationBase: z.enum(["PENHA", "CD TRÊS RIOS"]).optional(),
   userId: z.string().uuid(),
   name: z.string().trim().min(2).max(120),
   email: z
@@ -150,6 +152,9 @@ export const createTransporterAccessRequest = createServerFn({ method: "POST" })
     if (!isValidCnpj(data.companyCnpj)) {
       return { ok: false as const, error: "Informe um CNPJ válido." };
     }
+    if (isTransgarra(data.companyCnpj) && !isOperationBase(data.operationBase)) {
+      return { ok: false as const, error: "Selecione a base da Transgarra: Rio/Penha ou Três Rios." };
+    }
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
@@ -201,7 +206,9 @@ export const createTransporterAccessRequest = createServerFn({ method: "POST" })
         user_id: data.userId,
         requester_name: data.name,
         email: data.email,
-        company_name: data.companyName,
+        company_name: isTransgarra(data.companyCnpj)
+          ? data.operationBase === "PENHA" ? "TRANSGARRA RIO" : "TRANSGARRA TRÊS RIOS"
+          : data.companyName,
         company_cnpj: data.companyCnpj,
         status: "PENDING",
       })
@@ -282,13 +289,18 @@ export const listTransporterAccessRequests = createServerFn({ method: "POST" })
     }));
 
     const requestRows = (requests ?? []).map((request: any) => {
-      const cnpjMatch = companyRows.find((company) => company.cnpj === request.company_cnpj);
+      const cnpjMatch = companyRows.find(
+        (company: { cnpj: string | null }) => company.cnpj === request.company_cnpj,
+      );
       const nameMatch = companyRows.find(
-        (company) => company.normalizedName === normalizeCompanyName(String(request.company_name)),
+        (company: { normalizedName: string }) =>
+          company.normalizedName === normalizeCompanyName(String(request.company_name)),
       );
       return {
         ...request,
-        suggested_company_id: cnpjMatch?.id ?? nameMatch?.id ?? null,
+        suggested_company_id: isTransgarra(request.company_cnpj)
+          ? nameMatch?.id ?? null
+          : cnpjMatch?.id ?? nameMatch?.id ?? null,
       };
     });
 
@@ -466,6 +478,9 @@ export const approveTransporterAccessRequest = createServerFn({ method: "POST" }
     let company: { id: string; name: string; cnpj: string | null } | null = null;
 
     if (data.createNewCompany) {
+      if (isTransgarra(request.company_cnpj)) {
+        return { ok: false as const, error: "Selecione a operação Transgarra existente: Rio ou Três Rios." };
+      }
       const { data: existingByCnpj } = await db
         .from("transporter_companies")
         .select("id, name, cnpj")
@@ -509,6 +524,11 @@ export const approveTransporterAccessRequest = createServerFn({ method: "POST" }
       if (!selectedCompany) {
         return { ok: false as const, error: "Transportadora não encontrada ou inativa." };
       }
+      const sharedTransgarra = isTransgarra(request.company_cnpj) &&
+        ["TRANSGARRA RIO", "TRANSGARRA TRES RIOS"].includes(normalizeCompanyName(selectedCompany.name));
+      if (isTransgarra(request.company_cnpj) && !sharedTransgarra) {
+        return { ok: false as const, error: "Selecione TRANSGARRA RIO ou TRANSGARRA TRÊS RIOS." };
+      }
 
       if (selectedCompany.cnpj && selectedCompany.cnpj !== request.company_cnpj) {
         return {
@@ -517,7 +537,7 @@ export const approveTransporterAccessRequest = createServerFn({ method: "POST" }
         };
       }
 
-      if (!selectedCompany.cnpj) {
+      if (!selectedCompany.cnpj && !sharedTransgarra) {
         const { error: cnpjError } = await db
           .from("transporter_companies")
           .update({ cnpj: request.company_cnpj, updated_at: new Date().toISOString() })

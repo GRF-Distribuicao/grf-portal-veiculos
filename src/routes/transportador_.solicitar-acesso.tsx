@@ -9,8 +9,9 @@ import { Label } from "@/components/ui/label";
 import { transporterSupabase } from "@/integrations/supabase/transporter-client";
 import { lookupTransporterCnpj } from "@/lib/grf-cnpj.functions";
 import { createTransporterAccessRequest } from "@/lib/grf-transporter-access.functions";
+import { isTransgarra, isOperationBase, type OperationBase } from "@/lib/grf-operation-base";
 
-export const Route = createFileRoute("/transportador/solicitar-acesso")({
+export const Route = createFileRoute("/transportador_/solicitar-acesso")({
   ssr: false,
   head: () => ({
     meta: [
@@ -55,6 +56,7 @@ function TransporterAccessRequestPage() {
   const [email, setEmail] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [companyCnpj, setCompanyCnpj] = useState("");
+  const [operationBase, setOperationBase] = useState<OperationBase | "">("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -66,6 +68,7 @@ function TransporterAccessRequestPage() {
   const [success, setSuccess] = useState(false);
 
   function handleCnpjChange(value: string) {
+    setOperationBase("");
     setCompanyCnpj(formatCnpj(value));
     setCompanyName("");
     setCnpjLookup(null);
@@ -119,6 +122,10 @@ function TransporterAccessRequestPage() {
     setError(null);
 
     const normalizedEmail = email.trim().toLowerCase();
+    if (isTransgarra(companyCnpj) && !isOperationBase(operationBase)) {
+      setError("Selecione a base da Transgarra antes de solicitar acesso.");
+      return;
+    }
     if (digits(companyCnpj).length !== 14) {
       setError("Informe um CNPJ válido com 14 dígitos.");
       return;
@@ -168,7 +175,7 @@ function TransporterAccessRequestPage() {
       setError(
         signUpError?.message?.toLowerCase().includes("registered")
           ? "Este e-mail já possui cadastro. Use o login ou a opção de recuperar senha."
-          : "Não foi possível criar a solicitação de acesso.",
+          : `Não foi possível criar a conta: ${signUpError?.message ?? "Resposta inválida do serviço de autenticação."}`,
       );
       return;
     }
@@ -187,6 +194,7 @@ function TransporterAccessRequestPage() {
         email: normalizedEmail,
         companyName: companyName.trim(),
         companyCnpj: digits(companyCnpj),
+        ...(isTransgarra(companyCnpj) && isOperationBase(operationBase) ? { operationBase } : {}),
       },
     });
 
@@ -296,6 +304,19 @@ function TransporterAccessRequestPage() {
                   )}
                 </div>
 
+                {isTransgarra(companyCnpj) && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="access-operation-base">Base de operação</Label>
+                    <select id="access-operation-base" required value={operationBase}
+                      onChange={(event) => setOperationBase(event.target.value as OperationBase | "")}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                      <option value="">Selecione a base</option>
+                      <option value="PENHA">Rio / Penha</option>
+                      <option value="CD TRÊS RIOS">Três Rios</option>
+                    </select>
+                    <p className="text-xs text-muted-foreground">O CNPJ é compartilhado. A GRF confirmará a operação antes de liberar o acesso.</p>
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <Label>Nome do responsável</Label>
                   <Input value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" required />

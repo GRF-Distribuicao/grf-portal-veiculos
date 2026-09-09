@@ -1,5 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Plug, Info } from "lucide-react";
+import { Plug, Info, Download } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+import { exportSankhyaQueue } from "@/lib/grf-sankhya-export.functions";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { listRegistrations } from "@/lib/grf.functions";
@@ -23,6 +26,26 @@ export const Route = createFileRoute("/admin/sankhya")({
 });
 
 function SankhyaPage() {
+  const exportQueue = useServerFn(exportSankhyaQueue);
+  const [exporting, setExporting] = useState(false);
+  async function downloadExcel() {
+    setExporting(true);
+    try {
+      const rows = await exportQueue();
+      if (!rows.length) {
+        toast.info("Nenhum cadastro na fila para exportar.");
+        return;
+      }
+      const { buildSankhyaWorkbook } = await import("@/lib/grf-sankhya-export");
+      const { writeFile } = await import("xlsx");
+      writeFile(buildSankhyaWorkbook(rows), `cadastros-sankhya-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      toast.success(`${rows.length} cadastro(s) exportado(s).`);
+    } catch {
+      toast.error("Não foi possível gerar o Excel. Tente novamente.");
+    } finally {
+      setExporting(false);
+    }
+  }
   const list = useServerFn(listRegistrations);
   const { data } = useQuery({
     queryKey: ["sankhya-queue"],
@@ -53,7 +76,13 @@ function SankhyaPage() {
       </div>
 
       <section className="mt-8">
-        <h2 className="text-lg font-bold">Fila: prontos para integração</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-bold">Fila: prontos para integração</h2>
+          <Button variant="outline" size="sm" onClick={downloadExcel} disabled={exporting}>
+            <Download className="mr-2 size-4" />
+            {exporting ? "Gerando Excel…" : "Exportar para Excel"}
+          </Button>
+        </div>
         <div className="mt-3 overflow-hidden rounded-lg border border-border bg-card">
           {(data?.list.length ?? 0) === 0 ? (
             <p className="p-6 text-sm text-muted-foreground">

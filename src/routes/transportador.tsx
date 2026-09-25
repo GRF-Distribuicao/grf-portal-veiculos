@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Building2, CalendarDays, CheckCircle2, KeyRound, Loader2, LogIn, LogOut, Save, Truck, UserPlus } from "lucide-react";
+import { AlertTriangle, Building2, CalendarDays, CheckCircle2, KeyRound, Loader2, LogIn, LogOut, Save, Truck, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { PublicFooter, PublicHeader } from "@/components/grf/chrome";
 import { TransporterCorrectionsPanel } from "@/components/grf/transporter-corrections-panel";
@@ -9,6 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { transporterSupabase as supabase } from "@/integrations/supabase/transporter-client";
 import { prettyPlate } from "@/lib/grf-domain";
+import {
+  canInformAvailability,
+  isApprovalRequiredError,
+  isVisibleInTransporterArea,
+  normalizePortalStatus,
+  type PortalStatus,
+} from "@/lib/grf-fleet-eligibility";
 
 export const Route = createFileRoute("/transportador")({
   ssr: false,
@@ -34,6 +41,7 @@ type VehicleRow = {
   pallets: number | null;
   completion_status: string | null;
   sankhya_registered: boolean | null;
+  portal_status: PortalStatus;
 };
 
 type HistoryRow = {
@@ -74,8 +82,21 @@ function TransporterArea() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [accessError, setAccessError] = useState<string | null>(null);
+  const [fleetStatusError, setFleetStatusError] = useState(false);
 
   const today = useMemo(() => localDateISO(), []);
+
+  // O envio de hoje pode trazer um veículo que depois foi devolvido: ele não
+  // entra na contagem nem é reenviado. O banco recusaria de qualquer forma.
+  const approvedIds = useMemo(
+    () => new Set(vehicles.filter((vehicle) => canInformAvailability(vehicle.portal_status)).map((vehicle) => vehicle.id)),
+    [vehicles],
+  );
+  const selectedApproved = useMemo(
+    () => Array.from(selected).filter((id) => approvedIds.has(id)),
+    [selected, approvedIds],
+  );
+  const pendingCount = vehicles.length - approvedIds.size;
 
   useEffect(() => {
     void bootstrap();
@@ -150,7 +171,7 @@ function TransporterArea() {
     setCompanyId(cid);
     setMembershipRole(String(membership.role ?? ""));
 
-    const [{ data: company }, { data: links, error: linksError }] = await Promise.all([
+    const [{ data: company }, { data: links, error: linksError }, { data: fleetStatus, error: fleetStatusFailure }] = await Promise.all([
       db.from("transporter_companies").select("name").eq("id", cid).single(),
       db
         .from("transporter_vehicle_links")
@@ -159,6 +180,9 @@ function TransporterArea() {
         )
         .eq("transporter_company_id", cid)
         .eq("active", true),
+      // Situação do cadastro de cada veículo (migração 16). Sem ela a tela não
+      // sabe o que é aprovado, então não oferece nenhum veículo.
+      db.rpc("transporter_fleet_status"),
     ]);
 
     setCompanyName(String(company?.name ?? "Transportadora"));
@@ -169,6 +193,21 @@ function TransporterArea() {
       return;
     }
 
+    if (fleetStatusFailure) {
+      setVehicles([]);
+      setFleetStatusError(true);
+      await loadAvailability(cid);
+      return;
+    }
+    setFleetStatusError(false);
+
+    const statusByVehicle = new Map<string, PortalStatus>();
+    for (const row of (fleetStatus ?? []) as Array<{ vehicle_id: string; portal_status: string }>) {
+      statusByVehicle.set(String(row.vehicle_id), normalizePortalStatus(row.portal_status));
+    }
+
+    // Só entram aprovados (podem ser informados) e devolvidos (pendência de
+    // correção). Em análise, reprovado e Sankhya sem complemento não aparecem.
     const rows: VehicleRow[] = (links ?? [])
       .map((link: any) => (Array.isArray(link.vehicles) ? link.vehicles[0] : link.vehicles))
       .filter(Boolean)
@@ -181,8 +220,13 @@ function TransporterArea() {
         pallets: vehicle.pallets == null ? null : Number(vehicle.pallets),
         completion_status: vehicle.completion_status ?? null,
         sankhya_registered: vehicle.sankhya_registered ?? null,
+        portal_status: statusByVehicle.get(String(vehicle.id)) ?? "PENDENTE",
       }))
-      .sort((a: VehicleRow, b: VehicleRow) => a.plate.localeCompare(b.plate));
+      .filter((vehicle: VehicleRow) => isVisibleInTransporterArea(vehicle.portal_status))
+      .sort((a: VehicleRow, b: VehicleRow) => {
+        const rank = (row: VehicleRow) => (canInformAvailability(row.portal_status) ? 0 : 1);
+        return rank(a) - rank(b) || a.plate.localeCompare(b.plate);
+      });
 
     setVehicles(rows);
     await loadAvailability(cid);
@@ -293,6 +337,7 @@ function TransporterArea() {
     setCompanyId(null);
     setCompanyName("");
     setVehicles([]);
+    setFleetStatusError(false);
     setSelected(new Set());
     setHistory([]);
     setPassword("");
@@ -301,6 +346,7 @@ function TransporterArea() {
   }
 
   function toggleVehicle(id: string) {
+    if (!approvedIds.has(id)) return;
     setSelected((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
@@ -314,19 +360,24 @@ function TransporterArea() {
     setSaving(true);
     const { data, error } = await (supabase as any).rpc("submit_fleet_availability", {
       p_availability_date: today,
-      p_vehicle_ids: Array.from(selected),
+      p_vehicle_ids: selectedApproved,
       p_note: null,
     });
     setSaving(false);
 
     if (error) {
-      toast.error("Não foi possível gravar a disponibilidade.");
+      toast.error(
+        isApprovalRequiredError(error.message)
+          ? error.message
+          : "Não foi possível gravar a disponibilidade.",
+      );
+      if (isApprovalRequiredError(error.message) && userId) await loadArea(userId);
       return;
     }
 
     const result = Array.isArray(data) ? data[0] : data;
     toast.success(
-      `Disponibilidade confirmada: ${result?.available_count ?? selected.size} veículo(s).`,
+      `Disponibilidade confirmada: ${result?.available_count ?? selectedApproved.length} veículo(s).`,
     );
     await loadAvailability(companyId);
   }
@@ -453,16 +504,57 @@ function TransporterArea() {
           </div>
           <div className="rounded-lg border border-border bg-card px-4 py-3 text-right">
             <p className="text-xs font-semibold text-muted-foreground">Disponíveis selecionados</p>
-            <p className="font-display text-2xl font-extrabold text-blue-600">{selected.size}</p>
+            <p className="font-display text-2xl font-extrabold text-blue-600">{selectedApproved.length}</p>
+            {pendingCount > 0 && (
+              <p className="mt-1 text-xs font-semibold text-warning-foreground">{pendingCount} pendente(s) de correção</p>
+            )}
           </div>
         </div>
 
-        <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          {vehicles.length === 0 ? (
-            <p className="p-6 text-sm text-muted-foreground">Nenhum veículo está vinculado a esta transportadora no cadastro mestre.</p>
+        <div className="mt-4 rounded-xl border border-border bg-surface/60 p-4 text-sm leading-6 text-muted-foreground">
+          <p>
+            <strong className="text-foreground">Só aparecem aqui os veículos com cadastro aprovado pela GRF</strong>, e só eles podem ser
+            informados para a roteirização. Veículo devolvido fica como pendência até a correção ser aprovada. Cadastro enviado
+            e ainda em análise aparece depois da aprovação.
+          </p>
+          <p className="mt-2">
+            Está faltando algum veículo da sua frota? Finalize o cadastro dele em{" "}
+            <a href="/iniciar-cadastro" className="font-semibold text-primary underline-offset-2 hover:underline">Iniciar cadastro</a>.
+          </p>
+        </div>
+
+        <div className="mt-4 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          {fleetStatusError ? (
+            <p className="p-6 text-sm text-destructive">
+              Não foi possível verificar a situação dos cadastros da sua frota. Atualize a página; se continuar, fale com a GRF.
+            </p>
+          ) : vehicles.length === 0 ? (
+            <p className="p-6 text-sm text-muted-foreground">
+              Nenhum veículo com cadastro aprovado. Finalize o cadastro dos veículos da sua frota em{" "}
+              <a href="/iniciar-cadastro" className="font-semibold text-primary underline-offset-2 hover:underline">Iniciar cadastro</a>{" "}
+              para poder informá-los à roteirização.
+            </p>
           ) : (
             <ul className="divide-y divide-border">
               {vehicles.map((vehicle) => {
+                if (!canInformAvailability(vehicle.portal_status)) {
+                  return (
+                    <li key={vehicle.id} className="flex flex-wrap items-center justify-between gap-4 bg-warning/10 p-4">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="grid size-10 place-items-center rounded-lg border border-warning/40 bg-card text-warning-foreground">
+                          <AlertTriangle className="size-5" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="font-display font-bold tracking-wide">{prettyPlate(vehicle.plate)}</p>
+                          <p className="truncate text-sm text-muted-foreground">{vehicle.brand_model || vehicle.vehicle_type || "Modelo não informado"}</p>
+                        </div>
+                      </div>
+                      <span className="rounded-full border border-warning/40 bg-card px-3 py-1 text-xs font-bold text-warning-foreground">
+                        Devolvido · corrija em Correções pendentes
+                      </span>
+                    </li>
+                  );
+                }
                 const active = selected.has(vehicle.id);
                 return (
                   <li key={vehicle.id}>
@@ -490,7 +582,7 @@ function TransporterArea() {
         </div>
 
         <div className="mt-5 flex justify-end">
-          <Button onClick={() => void saveAvailability()} disabled={saving} className="bg-blue-600 text-white hover:bg-blue-700">
+          <Button onClick={() => void saveAvailability()} disabled={saving || fleetStatusError} className="bg-blue-600 text-white hover:bg-blue-700">
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
             Confirmar disponibilidade do dia
           </Button>

@@ -31,6 +31,7 @@ type CompanyRow = {
   id: string;
   name: string;
   fleetCount: number;
+  approvedCount: number | null;
   informed: boolean;
   revision: number | null;
   submittedAt: string | null;
@@ -184,7 +185,11 @@ function RoutingAvailabilityPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate font-bold">{company.name}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">Frota vinculada: {company.fleetCount}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {company.approvedCount == null
+                            ? `Frota vinculada: ${company.fleetCount}`
+                            : `Frota aprovada: ${company.approvedCount} de ${company.fleetCount} vinculados`}
+                        </p>
                       </div>
                       {company.informed ? (
                         <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-2 py-1 text-[10px] font-bold text-success uppercase">

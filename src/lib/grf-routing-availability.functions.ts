@@ -77,6 +77,11 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
       fleetByCompany.set(cid, current);
     }
 
+    // Quantos veículos de cada frota têm cadastro aprovado (os únicos que o
+    // transportador consegue informar). Consulta separada e tolerante a falha:
+    // se não vier, o card volta a mostrar só a frota vinculada.
+    const approvedVehicleIds = await loadApprovedVehicleIds(db);
+
     const submissionByCompany = new Map<string, Record<string, any>>();
     for (const submission of submissions) {
       submissionByCompany.set(String(submission.transporter_company_id), submission);
@@ -129,6 +134,7 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
           name: String(company.name),
           cnpj: company.cnpj ?? null,
           fleetCount: fleet.length,
+          approvedCount: approvedVehicleIds ? fleet.filter((vehicle) => approvedVehicleIds.has(vehicle.id)).length : null,
           informed,
           revision: informed && submission ? Number(submission.revision) : null,
           submittedAt: informed ? submission?.submitted_at ?? null : null,
@@ -163,3 +169,27 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
       },
     };
   });
+
+const APPROVED_STATUSES = ["APROVADO", "PRONTO_INTEGRACAO"];
+const PAGE_SIZE = 1000;
+
+async function loadApprovedVehicleIds(db: any): Promise<Set<string> | null> {
+  const ids = new Set<string>();
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const { data, error } = await db
+      .from("vehicle_registrations")
+      .select("vehicle_id")
+      .in("status", APPROVED_STATUSES)
+      .not("vehicle_id", "is", null)
+      .order("vehicle_id", { ascending: true })
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (error) {
+      console.error("[disponibilidade] falha ao ler cadastros aprovados:", error.message);
+      return null;
+    }
+    const page = (data ?? []) as Array<{ vehicle_id: string }>;
+    for (const row of page) ids.add(String(row.vehicle_id));
+    if (page.length < PAGE_SIZE) break;
+  }
+  return ids;
+}

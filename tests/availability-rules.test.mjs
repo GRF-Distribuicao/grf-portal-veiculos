@@ -122,3 +122,32 @@ test('função inexistente no banco é reconhecida; outros erros não', () => {
   assert.equal(isMissingFunctionError(null), false);
   assert.equal(isMissingFunctionError(new Error('Failed to fetch')), false);
 });
+
+test('distribuição: no mesmo peso, os veículos ficam agrupados pelo tipo', () => {
+  // Disponibilidade de 28/09 (print da aba Disponibilidade).
+  const rows = [
+    { plate: 'PZN2626', brand_model: '3/4', lotacao_kg: 3500, pallets: 8 },
+    { plate: 'RJI6G45', brand_model: 'FIORINO', lotacao_kg: 700, pallets: 1 },
+    { plate: 'KYG9099', brand_model: '3/4', lotacao_kg: 3500, pallets: 8 },
+    { plate: 'CQW3F29', brand_model: 'VAN', lotacao_kg: 1600, pallets: 3 },
+    { plate: 'KRE2210', brand_model: 'VAN', lotacao_kg: 1500, pallets: 3 },
+    { plate: 'KRZ0E44', brand_model: 'BONGO', lotacao_kg: 1600, pallets: 3 },
+    { plate: 'GVI4I08', brand_model: 'VAN', lotacao_kg: 1500, pallets: 3 },
+    { plate: 'DXA7I79', brand_model: 'VAN', lotacao_kg: 1600, pallets: 2 },
+    { plate: 'KLF2I19', brand_model: 'BONGO', lotacao_kg: 1500, pallets: 3 },
+  ];
+  assert.deepEqual(
+    rows.sort(compareDistribution).map((row) => `${row.brand_model} ${row.lotacao_kg} ${row.plate}`),
+    [
+      '3/4 3500 KYG9099',
+      '3/4 3500 PZN2626',
+      'BONGO 1600 KRZ0E44',
+      'VAN 1600 CQW3F29',
+      'VAN 1600 DXA7I79',
+      'BONGO 1500 KLF2I19',
+      'VAN 1500 GVI4I08',
+      'VAN 1500 KRE2210',
+      'FIORINO 700 RJI6G45',
+    ],
+  );
+});

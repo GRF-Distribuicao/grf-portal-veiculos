@@ -65,6 +65,15 @@ begin
   end if;
 
   if tg_table_name = 'fleet_availability_submissions' then
+    -- Atualização que só mexe no autor não é alteração da disponibilidade: é a
+    -- exclusão de um usuário (Excluir acesso) limpando submitted_by pela
+    -- chave estrangeira. Continua liberada em qualquer dia.
+    if tg_op = 'UPDATE'
+       and (to_jsonb(new) - 'submitted_by' - 'submitted_by_email')
+         = (to_jsonb(old) - 'submitted_by' - 'submitted_by_email') then
+      return new;
+    end if;
+
     if tg_op in ('UPDATE', 'DELETE') and not public.fleet_availability_is_open(old.availability_date) then
       v_date := old.availability_date;
     elsif tg_op in ('INSERT', 'UPDATE') and not public.fleet_availability_is_open(new.availability_date) then

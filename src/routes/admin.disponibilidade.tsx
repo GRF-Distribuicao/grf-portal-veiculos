@@ -164,6 +164,8 @@ function RoutingAvailabilityPage() {
     [filteredVehicles],
   );
   const usedCount = vehicles.filter((vehicle) => vehicle.usedAt).length;
+  // A seção Transbordo só aparece quando algum cavalo carreta foi informado no dia.
+  const hasTransbordo = vehicles.some((vehicle) => isTransbordoVehicle(vehicle));
   const pendingUsageId = usageMutation.isPending ? usageMutation.variables?.vehicleId ?? null : null;
 
   async function exportExcel() {
@@ -209,7 +211,7 @@ function RoutingAvailabilityPage() {
           </p>
         </div>
 
-        <div className="flex items-end gap-2">
+        <div className="flex flex-wrap items-end gap-2">
           <label className="space-y-1 text-xs font-semibold text-muted-foreground">
             <span className="flex items-center gap-1.5"><CalendarDays className="size-3.5" /> Data</span>
             <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-[165px] bg-card" />
@@ -338,15 +340,17 @@ function RoutingAvailabilityPage() {
               onUsage={markUsage}
             />
 
-            <AvailabilityGroup
-              title="Transbordo"
-              summary={`${transbordoVehicles.length} cavalo(s) · ${transbordoVehicles.reduce((sum, vehicle) => sum + (vehicle.trailer_pallets ?? 0), 0).toLocaleString("pt-BR")} pallets informados · mais pallets primeiro`}
-              vehicles={transbordoVehicles}
-              mode="transbordo"
-              usageEnabled={usageEnabled}
-              pendingUsageId={pendingUsageId}
-              onUsage={markUsage}
-            />
+            {hasTransbordo && (
+              <AvailabilityGroup
+                title="Transbordo"
+                summary={`${transbordoVehicles.length} cavalo(s) · ${transbordoVehicles.reduce((sum, vehicle) => sum + (vehicle.trailer_pallets ?? 0), 0).toLocaleString("pt-BR")} pallets informados · mais pallets primeiro`}
+                vehicles={transbordoVehicles}
+                mode="transbordo"
+                usageEnabled={usageEnabled}
+                pendingUsageId={pendingUsageId}
+                onUsage={markUsage}
+              />
+            )}
 
             {usageEnabled && (usedVehicles.length > 0 || withdrawnUsed.length > 0) && (
               <AvailabilityGroup

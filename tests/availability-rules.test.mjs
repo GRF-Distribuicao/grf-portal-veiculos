@@ -7,6 +7,7 @@ import {
   findRepeatedTrailer,
   isCutoffError,
   isFriendlyAvailabilityError,
+  isMissingFunctionError,
   isTransbordoVehicle,
   isValidPlate,
   normalizePlate,
@@ -111,4 +112,13 @@ test('Excel exporta tudo, distribuição antes do transbordo, e marca o que foi 
   assert.equal(sheet[2]['Observação'], '=1+1');
   assert.equal(sheet[0]['Placa da carreta'] ?? '', '');
   assert.equal(sheet[1]['Atualizado'], '09:11');
+});
+
+test('função inexistente no banco é reconhecida; outros erros não', () => {
+  assert.equal(isMissingFunctionError({ code: 'PGRST202', message: 'Could not find the function public.submit_fleet_availability_items(p_availability_date, p_items) in the schema cache' }), true);
+  assert.equal(isMissingFunctionError({ message: 'Could not find the function public.fleet_availability_window without parameters in the schema cache' }), true);
+  assert.equal(isMissingFunctionError({ code: '42501', message: 'permission denied for function transporter_fleet_status' }), false);
+  assert.equal(isMissingFunctionError({ code: 'P0001', message: 'Disponibilidade de 28/09/2026 encerrada às 16:30.' }), false);
+  assert.equal(isMissingFunctionError(null), false);
+  assert.equal(isMissingFunctionError(new Error('Failed to fetch')), false);
 });

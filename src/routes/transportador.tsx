@@ -23,6 +23,7 @@ import {
   findRepeatedTrailer,
   isCutoffError,
   isFriendlyAvailabilityError,
+  isMissingFunctionError,
   isTransbordoVehicle,
   normalizePlate,
   palletOptions,
@@ -96,6 +97,7 @@ function TransporterArea() {
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [fleetStatusError, setFleetStatusError] = useState(false);
+  const [legacyFleet, setLegacyFleet] = useState(false);
   const [details, setDetails] = useState<Record<string, AvailabilityDetail>>({});
   // Data e horário de corte vêm do banco (migração 17), não do relógio do
   // computador. Sem a função, a tela usa a data local e o banco segue travando.
@@ -236,13 +238,18 @@ function TransporterArea() {
       return;
     }
 
-    if (fleetStatusFailure) {
+    // Função inexistente = migração 16 não aplicada ou desfeita: a tela volta
+    // ao comportamento anterior (toda a frota vinculada). Qualquer outra falha
+    // trava o envio.
+    const fleetStatusMissing = isMissingFunctionError(fleetStatusFailure);
+    if (fleetStatusFailure && !fleetStatusMissing) {
       setVehicles([]);
       setFleetStatusError(true);
       await loadAvailability(cid, day);
       return;
     }
     setFleetStatusError(false);
+    setLegacyFleet(fleetStatusMissing);
 
     const statusByVehicle = new Map<string, PortalStatus>();
     for (const row of (fleetStatus ?? []) as Array<{ vehicle_id: string; portal_status: string }>) {
@@ -263,7 +270,7 @@ function TransporterArea() {
         pallets: vehicle.pallets == null ? null : Number(vehicle.pallets),
         completion_status: vehicle.completion_status ?? null,
         sankhya_registered: vehicle.sankhya_registered ?? null,
-        portal_status: statusByVehicle.get(String(vehicle.id)) ?? "PENDENTE",
+        portal_status: fleetStatusMissing ? "APROVADO" : statusByVehicle.get(String(vehicle.id)) ?? "PENDENTE",
       }))
       .filter((vehicle: VehicleRow) => isVisibleInTransporterArea(vehicle.portal_status))
       .sort((a: VehicleRow, b: VehicleRow) => {
@@ -391,6 +398,7 @@ function TransporterArea() {
     setCompanyName("");
     setVehicles([]);
     setFleetStatusError(false);
+    setLegacyFleet(false);
     setSelected(new Set());
     setDetails({});
     setHistory([]);
@@ -452,10 +460,19 @@ function TransporterArea() {
     }
 
     setSaving(true);
-    const { data, error } = await (supabase as any).rpc("submit_fleet_availability_items", {
+    let { data, error } = await (supabase as any).rpc("submit_fleet_availability_items", {
       p_availability_date: today,
       p_items: items.map((item) => item.payload),
     });
+    // Função nova inexistente = migração 18 não aplicada ou desfeita: grava
+    // pela função anterior, só a seleção (sem obs e sem carreta).
+    if (error && isMissingFunctionError(error)) {
+      ({ data, error } = await (supabase as any).rpc("submit_fleet_availability", {
+        p_availability_date: today,
+        p_vehicle_ids: selectedApproved,
+        p_note: null,
+      }));
+    }
     setSaving(false);
 
     if (error) {
@@ -620,17 +637,19 @@ function TransporterArea() {
           </div>
         )}
 
-        <div className="mt-4 rounded-xl border border-border bg-surface/60 p-4 text-sm leading-6 text-muted-foreground">
-          <p>
-            <strong className="text-foreground">Só aparecem aqui os veículos com cadastro aprovado pela GRF</strong>, e só eles podem ser
-            informados para a roteirização. Veículo devolvido fica como pendência até a correção ser aprovada. Cadastro enviado
-            e ainda em análise aparece depois da aprovação.
-          </p>
-          <p className="mt-2">
-            Está faltando algum veículo da sua frota? Finalize o cadastro dele em{" "}
-            <a href="/iniciar-cadastro" className="font-semibold text-primary underline-offset-2 hover:underline">Iniciar cadastro</a>.
-          </p>
-        </div>
+        {!legacyFleet && (
+          <div className="mt-4 rounded-xl border border-border bg-surface/60 p-4 text-sm leading-6 text-muted-foreground">
+            <p>
+              <strong className="text-foreground">Só aparecem aqui os veículos com cadastro aprovado pela GRF</strong>, e só eles podem ser
+              informados para a roteirização. Veículo devolvido fica como pendência até a correção ser aprovada. Cadastro enviado
+              e ainda em análise aparece depois da aprovação.
+            </p>
+            <p className="mt-2">
+              Está faltando algum veículo da sua frota? Finalize o cadastro dele em{" "}
+              <a href="/iniciar-cadastro" className="font-semibold text-primary underline-offset-2 hover:underline">Iniciar cadastro</a>.
+            </p>
+          </div>
+        )}
 
         <div className="mt-4 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           {fleetStatusError ? (

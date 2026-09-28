@@ -144,3 +144,17 @@ export function isFriendlyAvailabilityError(message: unknown): boolean {
 export function isCutoffError(message: unknown): boolean {
   return typeof message === "string" && message.includes("encerrada às");
 }
+
+/**
+ * A função pedida não existe no banco (migração ainda não aplicada ou
+ * desfeita). Nesse caso a tela volta ao comportamento anterior em vez de
+ * travar, para código e banco poderem ser revertidos em qualquer ordem.
+ */
+export function isMissingFunctionError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const { code, message } = error as { code?: unknown; message?: unknown };
+  return (
+    code === "PGRST202" ||
+    (typeof message === "string" && message.includes("Could not find the function"))
+  );
+}

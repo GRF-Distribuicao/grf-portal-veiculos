@@ -97,11 +97,16 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
     const itemsBySubmission = new Map<string, Array<Record<string, any>>>();
 
     if (submissionIds.length) {
-      const { data: items, error: itemsError } = await db
-        .from("fleet_availability_items")
-        .select("submission_id, vehicle_id, available, available_from, note, trailer_plate, trailer_pallets")
-        .in("submission_id", submissionIds)
-        .eq("available", true);
+      const itemsQuery = (columns: string) =>
+        db.from("fleet_availability_items").select(columns).in("submission_id", submissionIds).eq("available", true);
+      // Sem as colunas do transbordo (migração 18 não aplicada ou desfeita), lê
+      // as colunas de antes em vez de derrubar a aba.
+      const full = await itemsQuery(
+        "submission_id, vehicle_id, available, available_from, note, trailer_plate, trailer_pallets",
+      );
+      const { data: items, error: itemsError } = full.error
+        ? await itemsQuery("submission_id, vehicle_id, available, available_from, note")
+        : full;
       if (itemsError) throw itemsError;
 
       for (const item of items ?? []) {

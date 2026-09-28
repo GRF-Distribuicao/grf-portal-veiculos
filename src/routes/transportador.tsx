@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Building2, CalendarDays, CheckCircle2, KeyRound, Loader2, LogIn, LogOut, Save, Truck, UserPlus } from "lucide-react";
+import { AlertTriangle, Building2, CalendarDays, CheckCircle2, Clock3, KeyRound, Loader2, Lock, LogIn, LogOut, Save, Truck, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { PublicFooter, PublicHeader } from "@/components/grf/chrome";
 import { TransporterCorrectionsPanel } from "@/components/grf/transporter-corrections-panel";
@@ -16,6 +16,19 @@ import {
   normalizePortalStatus,
   type PortalStatus,
 } from "@/lib/grf-fleet-eligibility";
+import {
+  AVAILABILITY_CUTOFF,
+  NOTE_MAX_LENGTH,
+  emptyDetail,
+  findRepeatedTrailer,
+  isCutoffError,
+  isFriendlyAvailabilityError,
+  isTransbordoVehicle,
+  normalizePlate,
+  palletOptions,
+  validateAvailabilityDetail,
+  type AvailabilityDetail,
+} from "@/lib/grf-availability-rules";
 
 export const Route = createFileRoute("/transportador")({
   ssr: false,
@@ -83,8 +96,19 @@ function TransporterArea() {
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [fleetStatusError, setFleetStatusError] = useState(false);
+  const [details, setDetails] = useState<Record<string, AvailabilityDetail>>({});
+  // Data e horário de corte vêm do banco (migração 17), não do relógio do
+  // computador. Sem a função, a tela usa a data local e o banco segue travando.
+  const [today, setToday] = useState(() => localDateISO());
+  const [cutoff, setCutoff] = useState<{ cutoffAt: number; offsetMs: number } | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
-  const today = useMemo(() => localDateISO(), []);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const closed = cutoff != null && nowMs + cutoff.offsetMs >= cutoff.cutoffAt;
 
   // O envio de hoje pode trazer um veículo que depois foi devolvido: ele não
   // entra na contagem nem é reenviado. O banco recusaria de qualquer forma.
@@ -171,7 +195,12 @@ function TransporterArea() {
     setCompanyId(cid);
     setMembershipRole(String(membership.role ?? ""));
 
-    const [{ data: company }, { data: links, error: linksError }, { data: fleetStatus, error: fleetStatusFailure }] = await Promise.all([
+    const [
+      { data: company },
+      { data: links, error: linksError },
+      { data: fleetStatus, error: fleetStatusFailure },
+      { data: windowRows, error: windowError },
+    ] = await Promise.all([
       db.from("transporter_companies").select("name").eq("id", cid).single(),
       db
         .from("transporter_vehicle_links")
@@ -183,9 +212,23 @@ function TransporterArea() {
       // Situação do cadastro de cada veículo (migração 16). Sem ela a tela não
       // sabe o que é aprovado, então não oferece nenhum veículo.
       db.rpc("transporter_fleet_status"),
+      db.rpc("fleet_availability_window"),
     ]);
 
     setCompanyName(String(company?.name ?? "Transportadora"));
+
+    const windowRow = !windowError ? (Array.isArray(windowRows) ? windowRows[0] : windowRows) : null;
+    const day = windowRow?.today ? String(windowRow.today) : localDateISO();
+    setToday(day);
+    setNowMs(Date.now());
+    setCutoff(
+      windowRow?.cutoff_at && windowRow?.server_now
+        ? {
+            cutoffAt: new Date(windowRow.cutoff_at).getTime(),
+            offsetMs: new Date(windowRow.server_now).getTime() - Date.now(),
+          }
+        : null,
+    );
 
     if (linksError) {
       setVehicles([]);
@@ -196,7 +239,7 @@ function TransporterArea() {
     if (fleetStatusFailure) {
       setVehicles([]);
       setFleetStatusError(true);
-      await loadAvailability(cid);
+      await loadAvailability(cid, day);
       return;
     }
     setFleetStatusError(false);
@@ -229,28 +272,38 @@ function TransporterArea() {
       });
 
     setVehicles(rows);
-    await loadAvailability(cid);
+    await loadAvailability(cid, day);
   }
 
-  async function loadAvailability(cid: string) {
+  async function loadAvailability(cid: string, day: string) {
     const db = supabase as any;
     const { data: current } = await db
       .from("fleet_availability_submissions")
       .select("id")
       .eq("transporter_company_id", cid)
-      .eq("availability_date", today)
+      .eq("availability_date", day)
       .eq("is_current", true)
       .maybeSingle();
 
     if (current?.id) {
-      const { data: items } = await db
-        .from("fleet_availability_items")
-        .select("vehicle_id")
-        .eq("submission_id", current.id)
-        .eq("available", true);
+      const itemsQuery = (columns: string) =>
+        db.from("fleet_availability_items").select(columns).eq("submission_id", current.id).eq("available", true);
+      // Se as colunas novas (migração 18) ainda não existirem, carrega só a seleção.
+      const full = await itemsQuery("vehicle_id, note, trailer_plate, trailer_pallets");
+      const { data: items } = full.error ? await itemsQuery("vehicle_id") : full;
       setSelected(new Set((items ?? []).map((item: any) => String(item.vehicle_id))));
+      const loaded: Record<string, AvailabilityDetail> = {};
+      for (const item of items ?? []) {
+        loaded[String(item.vehicle_id)] = {
+          note: item.note ?? "",
+          trailer_plate: item.trailer_plate ?? "",
+          trailer_pallets: item.trailer_pallets == null ? null : Number(item.trailer_pallets),
+        };
+      }
+      setDetails(loaded);
     } else {
       setSelected(new Set());
+      setDetails({});
     }
 
     const { data: submissions } = await db
@@ -339,6 +392,7 @@ function TransporterArea() {
     setVehicles([]);
     setFleetStatusError(false);
     setSelected(new Set());
+    setDetails({});
     setHistory([]);
     setPassword("");
     setAccessError(null);
@@ -346,7 +400,7 @@ function TransporterArea() {
   }
 
   function toggleVehicle(id: string) {
-    if (!approvedIds.has(id)) return;
+    if (!approvedIds.has(id) || closed) return;
     setSelected((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
@@ -355,23 +409,62 @@ function TransporterArea() {
     });
   }
 
+  function updateDetail(id: string, patch: Partial<AvailabilityDetail>) {
+    if (closed) return;
+    setDetails((current) => ({ ...current, [id]: { ...(current[id] ?? emptyDetail()), ...patch } }));
+  }
+
   async function saveAvailability() {
     if (!companyId || !userId) return;
+    if (closed) {
+      toast.error(`Disponibilidade de ${formatDate(today)} encerrada às ${AVAILABILITY_CUTOFF}. Não é possível alterar.`);
+      return;
+    }
+
+    const vehicleById = new Map(vehicles.map((vehicle) => [vehicle.id, vehicle]));
+    const items = selectedApproved.map((id) => {
+      const vehicle = vehicleById.get(id);
+      const detail = details[id] ?? emptyDetail();
+      const transbordo = vehicle ? isTransbordoVehicle(vehicle) : false;
+      return {
+        vehicle,
+        detail,
+        payload: {
+          vehicle_id: id,
+          note: detail.note.trim() || null,
+          trailer_plate: transbordo ? normalizePlate(detail.trailer_plate) || null : null,
+          trailer_pallets: transbordo ? detail.trailer_pallets : null,
+        },
+      };
+    });
+
+    for (const item of items) {
+      const problem = item.vehicle ? validateAvailabilityDetail(item.vehicle, item.detail) : null;
+      if (problem) {
+        toast.error(problem);
+        return;
+      }
+    }
+    const repeated = findRepeatedTrailer(items.map((item) => item.payload.trailer_plate ?? ""));
+    if (repeated) {
+      toast.error(`A carreta ${repeated} foi informada em mais de um cavalo.`);
+      return;
+    }
+
     setSaving(true);
-    const { data, error } = await (supabase as any).rpc("submit_fleet_availability", {
+    const { data, error } = await (supabase as any).rpc("submit_fleet_availability_items", {
       p_availability_date: today,
-      p_vehicle_ids: selectedApproved,
-      p_note: null,
+      p_items: items.map((item) => item.payload),
     });
     setSaving(false);
 
     if (error) {
       toast.error(
-        isApprovalRequiredError(error.message)
+        isFriendlyAvailabilityError(error.message)
           ? error.message
           : "Não foi possível gravar a disponibilidade.",
       );
-      if (isApprovalRequiredError(error.message) && userId) await loadArea(userId);
+      if ((isApprovalRequiredError(error.message) || isCutoffError(error.message)) && userId) await loadArea(userId);
       return;
     }
 
@@ -379,7 +472,7 @@ function TransporterArea() {
     toast.success(
       `Disponibilidade confirmada: ${result?.available_count ?? selectedApproved.length} veículo(s).`,
     );
-    await loadAvailability(companyId);
+    await loadAvailability(companyId, today);
   }
 
   if (loading) {
@@ -501,6 +594,12 @@ function TransporterArea() {
             <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground"><CalendarDays className="size-4" /> Disponibilidade de {formatDate(today)}</div>
             <h2 className="mt-1 font-display text-2xl font-extrabold">Minha frota</h2>
             <p className="mt-1 text-sm text-muted-foreground">Marque os veículos que a GRF poderá considerar na roteirização de hoje.</p>
+            {!closed && (
+              <p className="mt-1 text-xs font-semibold text-muted-foreground">
+                <Clock3 className="mr-1 inline size-3.5" />
+                Você pode informar e alterar até {AVAILABILITY_CUTOFF} de hoje (horário de Brasília).
+              </p>
+            )}
           </div>
           <div className="rounded-lg border border-border bg-card px-4 py-3 text-right">
             <p className="text-xs font-semibold text-muted-foreground">Disponíveis selecionados</p>
@@ -510,6 +609,16 @@ function TransporterArea() {
             )}
           </div>
         </div>
+
+        {closed && (
+          <div className="mt-4 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+            <Lock className="mt-0.5 size-4 shrink-0" />
+            <p>
+              <strong>Disponibilidade de {formatDate(today)} encerrada às {AVAILABILITY_CUTOFF}.</strong> Depois do horário de corte
+              não é possível alterar. O que está marcado abaixo é o que a roteirização recebeu.
+            </p>
+          </div>
+        )}
 
         <div className="mt-4 rounded-xl border border-border bg-surface/60 p-4 text-sm leading-6 text-muted-foreground">
           <p>
@@ -556,9 +665,12 @@ function TransporterArea() {
                   );
                 }
                 const active = selected.has(vehicle.id);
+                const transbordo = isTransbordoVehicle(vehicle);
+                const detail = details[vehicle.id] ?? emptyDetail();
+                const pallets = palletOptions(vehicle.pallets);
                 return (
                   <li key={vehicle.id}>
-                    <button type="button" onClick={() => toggleVehicle(vehicle.id)} className="flex w-full flex-wrap items-center justify-between gap-4 p-4 text-left transition-colors hover:bg-surface">
+                    <button type="button" onClick={() => toggleVehicle(vehicle.id)} disabled={closed} className="flex w-full flex-wrap items-center justify-between gap-4 p-4 text-left transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:hover:bg-transparent">
                       <div className="flex min-w-0 items-center gap-3">
                         <span className={active ? "grid size-10 place-items-center rounded-lg bg-blue-600 text-white" : "grid size-10 place-items-center rounded-lg bg-surface text-muted-foreground"}>
                           {active ? <CheckCircle2 className="size-5" /> : <Truck className="size-5" />}
@@ -571,9 +683,56 @@ function TransporterArea() {
                       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                         <span>Lotação: <strong className="text-foreground">{vehicle.lotacao_kg == null ? "—" : `${vehicle.lotacao_kg.toLocaleString("pt-BR")} kg`}</strong></span>
                         <span>Pallets: <strong className="text-foreground">{vehicle.pallets ?? "—"}</strong></span>
+                        {transbordo && <span className="rounded-full border border-blue-500/30 px-3 py-1 font-bold text-blue-700">Transbordo</span>}
                         <span className={active ? "rounded-full bg-blue-600 px-3 py-1 font-bold text-white" : "rounded-full bg-surface px-3 py-1 font-semibold"}>{active ? "Disponível" : "Não selecionado"}</span>
                       </div>
                     </button>
+                    {active && (
+                      <div className="grid gap-3 border-t border-dashed border-border bg-surface/40 px-4 py-3 sm:grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
+                        {transbordo && (
+                          <>
+                            <label className="space-y-1 text-xs font-semibold text-muted-foreground">
+                              <span>Placa da carreta *</span>
+                              <Input
+                                value={detail.trailer_plate}
+                                onChange={(event) => updateDetail(vehicle.id, { trailer_plate: event.target.value.toUpperCase() })}
+                                placeholder="ABC1D23"
+                                maxLength={8}
+                                disabled={closed}
+                                className="bg-card font-display tracking-wide uppercase"
+                              />
+                            </label>
+                            <label className="space-y-1 text-xs font-semibold text-muted-foreground">
+                              <span>Pallets na carreta *</span>
+                              <select
+                                value={detail.trailer_pallets ?? ""}
+                                onChange={(event) =>
+                                  updateDetail(vehicle.id, { trailer_pallets: event.target.value ? Number(event.target.value) : null })
+                                }
+                                disabled={closed || pallets.length === 0}
+                                className="flex h-9 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <option value="">{pallets.length ? "Selecione" : "Sem pallets no cadastro"}</option>
+                                {pallets.map((value) => (
+                                  <option key={value} value={value}>{value} pallets</option>
+                                ))}
+                              </select>
+                            </label>
+                          </>
+                        )}
+                        <label className="space-y-1 text-xs font-semibold text-muted-foreground">
+                          <span>Obs (opcional)</span>
+                          <Input
+                            value={detail.note}
+                            onChange={(event) => updateDetail(vehicle.id, { note: event.target.value })}
+                            placeholder="Ex.: disponível a partir das 19h"
+                            maxLength={NOTE_MAX_LENGTH}
+                            disabled={closed}
+                            className="bg-card"
+                          />
+                        </label>
+                      </div>
+                    )}
                   </li>
                 );
               })}
@@ -582,7 +741,7 @@ function TransporterArea() {
         </div>
 
         <div className="mt-5 flex justify-end">
-          <Button onClick={() => void saveAvailability()} disabled={saving || fleetStatusError} className="bg-blue-600 text-white hover:bg-blue-700">
+          <Button onClick={() => void saveAvailability()} disabled={saving || fleetStatusError || closed} className="bg-blue-600 text-white hover:bg-blue-700">
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
             Confirmar disponibilidade do dia
           </Button>

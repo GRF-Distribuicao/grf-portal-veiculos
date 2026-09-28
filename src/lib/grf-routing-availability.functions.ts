@@ -6,6 +6,12 @@ const availabilitySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
+const usageSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  vehicleId: z.string().uuid(),
+  used: z.boolean(),
+});
+
 type Vehicle = {
   id: string;
   plate: string;
@@ -93,7 +99,7 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
     if (submissionIds.length) {
       const { data: items, error: itemsError } = await db
         .from("fleet_availability_items")
-        .select("submission_id, vehicle_id, available, available_from, note")
+        .select("submission_id, vehicle_id, available, available_from, note, trailer_plate, trailer_pallets")
         .in("submission_id", submissionIds)
         .eq("available", true);
       if (itemsError) throw itemsError;
@@ -121,9 +127,18 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
               ...vehicle,
               available_from: item.available_from ?? null,
               availability_note: item.note ?? null,
+              trailer_plate: item["trailer_plate"] ?? null,
+              trailer_pallets: item["trailer_pallets"] == null ? null : Number(item["trailer_pallets"]),
             };
           })
-          .filter(Boolean) as Array<Vehicle & { available_from: string | null; availability_note: string | null }>;
+          .filter(Boolean) as Array<
+            Vehicle & {
+              available_from: string | null;
+              availability_note: string | null;
+              trailer_plate: string | null;
+              trailer_pallets: number | null;
+            }
+          >;
 
         const informed = availableVehicles.length > 0;
         const capacityKg = availableVehicles.reduce((sum, vehicle) => sum + (vehicle.lotacao_kg ?? 0), 0);
@@ -146,6 +161,10 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
       })
       .filter((company) => company.fleetCount > 0 || company.informed);
 
+    // Veículos já usados pela roteirização neste dia (migração 19). Tolerante
+    // a falha: sem a tabela, a aba continua funcionando sem a marcação.
+    const usage = await loadRoutingUsage(db, data.date);
+
     const allAvailableVehicles = companyRows.flatMap((company) =>
       company.vehicles.map((vehicle) => ({
         ...vehicle,
@@ -153,13 +172,30 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
         transporterName: company.name,
         submittedAt: company.submittedAt,
         revision: company.revision,
+        usedAt: usage?.get(vehicle.id)?.marked_at ?? null,
       })),
     );
+
+    // Marcado como usado, mas o transportador tirou da disponibilidade depois
+    // (antes do corte). Aparece em "Usados" com aviso.
+    const availableIds = new Set(allAvailableVehicles.map((vehicle) => vehicle.id));
+    const withdrawnUsed = usage
+      ? Array.from(usage.values())
+          .filter((row) => !availableIds.has(row.vehicle_id))
+          .map((row) => ({
+            id: row.vehicle_id,
+            plate: row.plate,
+            brand_model: row.brand_model,
+            usedAt: row.marked_at,
+          }))
+      : [];
 
     return {
       date: data.date,
       companies: companyRows,
       vehicles: allAvailableVehicles,
+      usageEnabled: usage != null,
+      withdrawnUsed,
       totals: {
         companies: companyRows.length,
         informedCompanies: companyRows.filter((company) => company.informed).length,
@@ -169,6 +205,93 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
       },
     };
   });
+
+/**
+ * Marca (ou desmarca) um veículo como usado pela roteirização no dia. Não
+ * segue o horário de corte: a roteirização trabalha depois das 16:30.
+ * Desmarcar devolve o veículo para a lista de disponíveis.
+ */
+export const setRoutingVehicleUsage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => usageSchema.parse(d))
+  .handler(async ({ data, context }) => {
+    const { assertGrfUser } = await import("@/lib/grf-auth.server");
+    await assertGrfUser(context.userId);
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+
+    if (!data.used) {
+      const { error } = await db
+        .from("routing_vehicle_usage")
+        .delete()
+        .eq("availability_date", data.date)
+        .eq("vehicle_id", data.vehicleId);
+      if (error) throw error;
+      return { ok: true };
+    }
+
+    // Só marca veículo que está na disponibilidade atual do dia.
+    const { data: submissions, error: submissionsError } = await db
+      .from("fleet_availability_submissions")
+      .select("id")
+      .eq("availability_date", data.date)
+      .eq("is_current", true);
+    if (submissionsError) throw submissionsError;
+
+    const submissionIds = (submissions ?? []).map((row: { id: string }) => String(row.id));
+    const { data: items, error: itemsError } = submissionIds.length
+      ? await db
+          .from("fleet_availability_items")
+          .select("vehicle_id")
+          .in("submission_id", submissionIds)
+          .eq("vehicle_id", data.vehicleId)
+          .eq("available", true)
+          .limit(1)
+      : { data: [], error: null };
+    if (itemsError) throw itemsError;
+    if (!items?.length) {
+      throw new Error("Este veículo não está mais na disponibilidade do dia.");
+    }
+
+    const { error } = await db
+      .from("routing_vehicle_usage")
+      .upsert(
+        { availability_date: data.date, vehicle_id: data.vehicleId, marked_by: context.userId },
+        { onConflict: "availability_date,vehicle_id", ignoreDuplicates: true },
+      );
+    if (error) throw error;
+    return { ok: true };
+  });
+
+type UsageRow = {
+  vehicle_id: string;
+  marked_at: string;
+  plate: string;
+  brand_model: string | null;
+};
+
+async function loadRoutingUsage(db: any, date: string): Promise<Map<string, UsageRow> | null> {
+  const { data, error } = await db
+    .from("routing_vehicle_usage")
+    .select("vehicle_id, marked_at, vehicles(plate, brand_model)")
+    .eq("availability_date", date);
+  if (error) {
+    console.error("[disponibilidade] falha ao ler veículos usados:", error.message);
+    return null;
+  }
+  const rows = new Map<string, UsageRow>();
+  for (const row of (data ?? []) as any[]) {
+    const vehicle = Array.isArray(row.vehicles) ? row.vehicles[0] : row.vehicles;
+    rows.set(String(row.vehicle_id), {
+      vehicle_id: String(row.vehicle_id),
+      marked_at: String(row.marked_at),
+      plate: String(vehicle?.plate ?? ""),
+      brand_model: vehicle?.brand_model ?? null,
+    });
+  }
+  return rows;
+}
 
 const APPROVED_STATUSES = ["APROVADO", "PRONTO_INTEGRACAO"];
 const PAGE_SIZE = 1000;

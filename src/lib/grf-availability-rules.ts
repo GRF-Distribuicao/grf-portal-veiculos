@@ -98,6 +98,8 @@ type SortableVehicle = {
   lotacao_kg: number | null;
   pallets: number | null;
   trailer_pallets?: number | null;
+  brand_model?: string | null;
+  vehicle_type?: string | null;
 };
 
 const desc = (a: number | null | undefined, b: number | null | undefined) => {
@@ -109,10 +111,21 @@ const desc = (a: number | null | undefined, b: number | null | undefined) => {
   return 0;
 };
 
-/** Distribuição: maior lotação (kg) primeiro; empate por pallets; depois placa. */
+/** Nome do veículo como a tela mostra (modelo, ou tipo quando não há modelo). */
+function vehicleLabel(vehicle: SortableVehicle): string {
+  return (vehicle.brand_model || vehicle.vehicle_type || "").trim().toUpperCase();
+}
+
+/**
+ * Distribuição: maior lotação (kg) primeiro; no mesmo peso, agrupa pelo
+ * veículo (BONGO, VAN...); depois pallets e placa.
+ */
 export function compareDistribution(a: SortableVehicle, b: SortableVehicle): number {
   return (
-    desc(a.lotacao_kg, b.lotacao_kg) || desc(a.pallets, b.pallets) || a.plate.localeCompare(b.plate)
+    desc(a.lotacao_kg, b.lotacao_kg) ||
+    vehicleLabel(a).localeCompare(vehicleLabel(b), "pt-BR") ||
+    desc(a.pallets, b.pallets) ||
+    a.plate.localeCompare(b.plate)
   );
 }
 

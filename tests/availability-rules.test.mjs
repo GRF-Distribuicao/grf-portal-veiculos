@@ -2,12 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
 import {
+  availabilityDateOptions,
   compareDistribution,
   compareTransbordo,
   findRepeatedTrailer,
   isCutoffError,
   isFriendlyAvailabilityError,
   isMissingFunctionError,
+  isSaturdayISO,
   isTransbordoOperation,
   isTransbordoVehicle,
   isValidPlate,
@@ -207,4 +209,17 @@ test('Excel: truck sai como Transbordo, sem placa de carreta e com os pallets do
   assert.equal(sheet[1]['Pallets informados'], 20);
   assert.equal(sheet[2]['Placa da carreta'] ?? '', '');
   assert.equal(sheet[2]['Pallets informados'], 16);
+});
+
+test('sexta: o transportador escolhe hoje ou sábado; outros dias só hoje', () => {
+  assert.deepEqual(availabilityDateOptions('2026-10-09'), ['2026-10-09', '2026-10-10']); // sexta
+  assert.deepEqual(availabilityDateOptions('2026-10-08'), ['2026-10-08']); // quinta
+  assert.deepEqual(availabilityDateOptions('2026-10-10'), ['2026-10-10']); // sábado
+  assert.deepEqual(availabilityDateOptions('2026-10-12'), ['2026-10-12']); // segunda
+  assert.deepEqual(availabilityDateOptions('2026-10-30'), ['2026-10-30', '2026-10-31']); // sexta no fim do mês
+  assert.deepEqual(availabilityDateOptions('2026-12-31'), ['2026-12-31']); // quinta
+  assert.deepEqual(availabilityDateOptions('2027-01-01'), ['2027-01-01', '2027-01-02']); // sexta na virada do ano
+  assert.deepEqual(availabilityDateOptions('lixo'), ['lixo']);
+  assert.equal(isSaturdayISO('2026-10-10'), true);
+  assert.equal(isSaturdayISO('2026-10-09'), false);
 });

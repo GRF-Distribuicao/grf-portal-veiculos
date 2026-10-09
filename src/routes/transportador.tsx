@@ -19,11 +19,13 @@ import {
 import {
   AVAILABILITY_CUTOFF,
   NOTE_MAX_LENGTH,
+  availabilityDateOptions,
   emptyDetail,
   findRepeatedTrailer,
   isCutoffError,
   isFriendlyAvailabilityError,
   isMissingFunctionError,
+  isSaturdayISO,
   isTransbordoVehicle,
   normalizePlate,
   palletOptions,
@@ -101,7 +103,12 @@ function TransporterArea() {
   const [details, setDetails] = useState<Record<string, AvailabilityDetail>>({});
   // Data e horário de corte vêm do banco (migração 17), não do relógio do
   // computador. Sem a função, a tela usa a data local e o banco segue travando.
+  // `today` é a data que o transportador está informando: hoje ou, na sexta,
+  // sábado (migração 20). `serverToday` é o dia de hoje no banco.
   const [today, setToday] = useState(() => localDateISO());
+  const [serverToday, setServerToday] = useState(() => localDateISO());
+  const [windowOpen, setWindowOpen] = useState<boolean | null>(null);
+  const [switchingDate, setSwitchingDate] = useState(false);
   const [cutoff, setCutoff] = useState<{ cutoffAt: number; offsetMs: number } | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -110,7 +117,10 @@ function TransporterArea() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const closed = cutoff != null && nowMs + cutoff.offsetMs >= cutoff.cutoffAt;
+  // Fechado pelo horário (16:30) ou porque o banco já diz que o dia não
+  // aceita alteração (ex.: sábado, cuja lista fecha na sexta).
+  const closed = windowOpen === false || (cutoff != null && nowMs + cutoff.offsetMs >= cutoff.cutoffAt);
+  const dateOptions = useMemo(() => availabilityDateOptions(serverToday), [serverToday]);
 
   // O envio de hoje pode trazer um veículo que depois foi devolvido: ele não
   // entra na contagem nem é reenviado. O banco recusaria de qualquer forma.
@@ -222,6 +232,8 @@ function TransporterArea() {
     const windowRow = !windowError ? (Array.isArray(windowRows) ? windowRows[0] : windowRows) : null;
     const day = windowRow?.today ? String(windowRow.today) : localDateISO();
     setToday(day);
+    setServerToday(day);
+    setWindowOpen(windowRow && typeof windowRow.is_open === "boolean" ? windowRow.is_open : null);
     setNowMs(Date.now());
     setCutoff(
       windowRow?.cutoff_at && windowRow?.server_now
@@ -417,13 +429,24 @@ function TransporterArea() {
     });
   }
 
+  async function changeDate(day: string) {
+    if (!companyId || day === today || saving || switchingDate) return;
+    setSwitchingDate(true);
+    setToday(day);
+    try {
+      await loadAvailability(companyId, day);
+    } finally {
+      setSwitchingDate(false);
+    }
+  }
+
   function updateDetail(id: string, patch: Partial<AvailabilityDetail>) {
     if (closed) return;
     setDetails((current) => ({ ...current, [id]: { ...(current[id] ?? emptyDetail()), ...patch } }));
   }
 
   async function saveAvailability() {
-    if (!companyId || !userId) return;
+    if (!companyId || !userId || switchingDate) return;
     if (closed) {
       toast.error(`Disponibilidade de ${formatDate(today)} encerrada às ${AVAILABILITY_CUTOFF}. Não é possível alterar.`);
       return;
@@ -610,7 +633,25 @@ function TransporterArea() {
           <div>
             <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground"><CalendarDays className="size-4" /> Disponibilidade de {formatDate(today)}</div>
             <h2 className="mt-1 font-display text-2xl font-extrabold">Minha frota</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Marque os veículos que a GRF poderá considerar na roteirização de hoje.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Marque os veículos que a GRF poderá considerar na roteirização de {formatDate(today)}.</p>
+            {dateOptions.length > 1 && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {dateOptions.map((option) => (
+                  <Button
+                    key={option}
+                    type="button"
+                    size="sm"
+                    variant={option === today ? "default" : "outline"}
+                    disabled={saving || switchingDate}
+                    onClick={() => void changeDate(option)}
+                  >
+                    {isSaturdayISO(option) ? "Sábado" : "Hoje"} · {formatDate(option)}
+                  </Button>
+                ))}
+                {switchingDate && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+                <span className="text-xs text-muted-foreground">Na sexta, informe também a lista de sábado. As duas fecham hoje às {AVAILABILITY_CUTOFF}.</span>
+              </div>
+            )}
             {!closed && (
               <p className="mt-1 text-xs font-semibold text-muted-foreground">
                 <Clock3 className="mr-1 inline size-3.5" />
@@ -633,6 +674,7 @@ function TransporterArea() {
             <p>
               <strong>Disponibilidade de {formatDate(today)} encerrada às {AVAILABILITY_CUTOFF}.</strong> Depois do horário de corte
               não é possível alterar. O que está marcado abaixo é o que a roteirização recebeu.
+              {isSaturdayISO(today) && " A lista de sábado é informada na sexta-feira."}
             </p>
           </div>
         )}
@@ -760,9 +802,9 @@ function TransporterArea() {
         </div>
 
         <div className="mt-5 flex justify-end">
-          <Button onClick={() => void saveAvailability()} disabled={saving || fleetStatusError || closed} className="bg-blue-600 text-white hover:bg-blue-700">
+          <Button onClick={() => void saveAvailability()} disabled={saving || switchingDate || fleetStatusError || closed} className="bg-blue-600 text-white hover:bg-blue-700">
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-            Confirmar disponibilidade do dia
+            Confirmar disponibilidade de {formatDate(today)}
           </Button>
         </div>
 

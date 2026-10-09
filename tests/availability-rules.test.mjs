@@ -8,10 +8,12 @@ import {
   isCutoffError,
   isFriendlyAvailabilityError,
   isMissingFunctionError,
+  isTransbordoOperation,
   isTransbordoVehicle,
   isValidPlate,
   normalizePlate,
   palletOptions,
+  transbordoPallets,
   validateAvailabilityDetail,
 } from '../src/lib/grf-availability-rules.ts';
 import { buildAvailabilityWorkbook } from '../src/lib/grf-availability-export.ts';
@@ -150,4 +152,59 @@ test('distribuição: no mesmo peso, os veículos ficam agrupados pelo tipo', ()
       'FIORINO 700 RJI6G45',
     ],
   );
+});
+
+test('aba da GRF: Transbordo segue a coluna operation do cadastro', () => {
+  assert.equal(isTransbordoOperation({ operation: 'TRANSBORDO', brand_model: 'CARRETA', vehicle_type: '7- CARRETA' }), true);
+  assert.equal(isTransbordoOperation({ operation: 'TRANSBORDO', brand_model: 'TRUCK', vehicle_type: '6- TRUCK' }), true);
+  assert.equal(isTransbordoOperation({ operation: 'transbordo ', brand_model: 'M.BENZ / ATEGO 2426', vehicle_type: null }), true);
+  assert.equal(isTransbordoOperation({ operation: 'DISTRIBUIÇÃO', brand_model: 'FIORINO', vehicle_type: null }), false);
+  assert.equal(isTransbordoOperation({ operation: 'DISTRIBUICAO', brand_model: '3/4', vehicle_type: null }), false);
+  assert.equal(isTransbordoOperation({ operation: 'SPOT', brand_model: 'TOCO', vehicle_type: '5- TOCO' }), false);
+});
+
+test('sem operation (cadastro novo do portal): carreta e truck pelo modelo, o resto distribuição', () => {
+  assert.equal(isTransbordoOperation({ operation: null, brand_model: 'CARRETA', vehicle_type: null }), true);
+  assert.equal(isTransbordoOperation({ operation: '', brand_model: 'TRUCK', vehicle_type: null }), true);
+  assert.equal(isTransbordoOperation({ brand_model: 'VW', vehicle_type: 'Truck' }), true);
+  assert.equal(isTransbordoOperation({ operation: null, brand_model: 'FIORINO', vehicle_type: 'Utilitário' }), false);
+  assert.equal(isTransbordoOperation({ operation: null, brand_model: '3/4', vehicle_type: 'Toco' }), false);
+});
+
+test('truck no transbordo não passa a exigir placa da carreta no formulário', () => {
+  const truck = { plate: 'GUD5B90', brand_model: 'TRUCK', vehicle_type: '6- TRUCK', operation: 'TRANSBORDO', pallets: 16 };
+  assert.equal(isTransbordoVehicle(truck), false);
+  assert.equal(validateAvailabilityDetail(truck, { note: '', trailer_plate: '', trailer_pallets: null }), null);
+});
+
+test('pallets do transbordo: os informados da carreta; truck usa os do cadastro', () => {
+  assert.equal(transbordoPallets({ pallets: 28, trailer_pallets: 20 }), 20);
+  assert.equal(transbordoPallets({ pallets: 16, trailer_pallets: null }), 16);
+  assert.equal(transbordoPallets({ pallets: null, trailer_pallets: null }), null);
+  const rows = [
+    { plate: 'TRK0001', lotacao_kg: 13000, pallets: 16, trailer_pallets: null },
+    { plate: 'CAR0001', lotacao_kg: 26000, pallets: 28, trailer_pallets: 28 },
+    { plate: 'CAR0002', lotacao_kg: 30000, pallets: 28, trailer_pallets: 10 },
+  ];
+  assert.deepEqual(rows.sort(compareTransbordo).map((row) => row.plate), ['CAR0001', 'TRK0001', 'CAR0002']);
+});
+
+test('Excel: truck sai como Transbordo, sem placa de carreta e com os pallets do cadastro', () => {
+  const base = { sankhya_registered: true, submittedAt: null, availability_note: null, trailer_plate: null, trailer_pallets: null, usedAt: null };
+  const rows = [
+    { ...base, plate: 'GUD5B90', transporterName: 'JETOIL', brand_model: 'TRUCK', vehicle_type: '6- TRUCK', operation: 'TRANSBORDO', lotacao_kg: 13000, pallets: 16 },
+    { ...base, plate: 'LTW5H73', transporterName: 'X', brand_model: 'TOCO', vehicle_type: '5- TOCO', operation: 'SPOT', lotacao_kg: 6000, pallets: 8 },
+    { ...base, plate: 'CHP9C36', transporterName: 'Y', brand_model: 'CARRETA', vehicle_type: '7- CARRETA', operation: 'TRANSBORDO', lotacao_kg: 26000, pallets: 28, trailer_plate: 'ABC1D23', trailer_pallets: 20 },
+  ];
+  const book = XLSX.read(XLSX.write(buildAvailabilityWorkbook(rows), { type: 'buffer', bookType: 'xlsx' }), { type: 'buffer' });
+  const sheet = XLSX.utils.sheet_to_json(book.Sheets['Disponibilidade']);
+  assert.deepEqual(sheet.map((row) => [row['Placa'], row['Operação']]), [
+    ['LTW5H73', 'Distribuição'],
+    ['CHP9C36', 'Transbordo'],
+    ['GUD5B90', 'Transbordo'],
+  ]);
+  assert.equal(sheet[1]['Placa da carreta'], 'ABC1D23');
+  assert.equal(sheet[1]['Pallets informados'], 20);
+  assert.equal(sheet[2]['Placa da carreta'] ?? '', '');
+  assert.equal(sheet[2]['Pallets informados'], 16);
 });

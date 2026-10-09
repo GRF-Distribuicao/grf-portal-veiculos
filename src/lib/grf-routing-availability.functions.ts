@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { isTransbordoOperation, transbordoPallets } from "@/lib/grf-availability-rules";
 
 const availabilitySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -17,6 +18,7 @@ type Vehicle = {
   plate: string;
   brand_model: string | null;
   vehicle_type: string | null;
+  operation: string | null;
   lotacao_kg: number | null;
   pallets: number | null;
   completion_status: string | null;
@@ -42,7 +44,7 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
       db
         .from("transporter_vehicle_links")
         .select(
-          "transporter_company_id, vehicle_id, vehicles(id, plate, brand_model, vehicle_type, lotacao_kg, pallets, completion_status, sankhya_registered)",
+          "transporter_company_id, vehicle_id, vehicles(id, plate, brand_model, vehicle_type, operation, lotacao_kg, pallets, completion_status, sankhya_registered)",
         )
         .eq("active", true),
       db
@@ -71,6 +73,7 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
         plate: String(raw.plate),
         brand_model: raw.brand_model ?? null,
         vehicle_type: raw.vehicle_type ?? null,
+        operation: raw.operation ?? null,
         lotacao_kg: raw.lotacao_kg == null ? null : Number(raw.lotacao_kg),
         pallets: raw.pallets == null ? null : Number(raw.pallets),
         completion_status: raw.completion_status ?? null,
@@ -148,6 +151,7 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
         const informed = availableVehicles.length > 0;
         const capacityKg = availableVehicles.reduce((sum, vehicle) => sum + (vehicle.lotacao_kg ?? 0), 0);
         const pallets = availableVehicles.reduce((sum, vehicle) => sum + (vehicle.pallets ?? 0), 0);
+        const split = splitByOperation(availableVehicles);
 
         return {
           id: companyId,
@@ -161,6 +165,8 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
           availableCount: availableVehicles.length,
           capacityKg,
           pallets,
+          distribution: split.distribution,
+          transbordo: split.transbordo,
           vehicles: availableVehicles,
         };
       })
@@ -207,9 +213,34 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
         availableVehicles: allAvailableVehicles.length,
         capacityKg: allAvailableVehicles.reduce((sum, vehicle) => sum + (vehicle.lotacao_kg ?? 0), 0),
         pallets: allAvailableVehicles.reduce((sum, vehicle) => sum + (vehicle.pallets ?? 0), 0),
+        ...splitByOperation(allAvailableVehicles),
       },
     };
   });
+
+/**
+ * Totais separados por operação para os cards: Distribuição soma lotação e
+ * pallets do cadastro; Transbordo soma lotação e os pallets do transbordo
+ * (informados da carreta; truck usa os do cadastro).
+ */
+function splitByOperation(
+  vehicles: Array<Vehicle & { trailer_pallets: number | null }>,
+) {
+  const distribution = { count: 0, capacityKg: 0, pallets: 0 };
+  const transbordo = { count: 0, capacityKg: 0, pallets: 0 };
+  for (const vehicle of vehicles) {
+    if (isTransbordoOperation(vehicle)) {
+      transbordo.count += 1;
+      transbordo.capacityKg += vehicle.lotacao_kg ?? 0;
+      transbordo.pallets += transbordoPallets(vehicle) ?? 0;
+    } else {
+      distribution.count += 1;
+      distribution.capacityKg += vehicle.lotacao_kg ?? 0;
+      distribution.pallets += vehicle.pallets ?? 0;
+    }
+  }
+  return { distribution, transbordo };
+}
 
 /**
  * Marca (ou desmarca) um veículo como usado pela roteirização no dia. Não

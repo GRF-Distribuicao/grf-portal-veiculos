@@ -23,6 +23,37 @@ export function isTransbordoVehicle(vehicle: VehicleModel): boolean {
   return text.includes("CARRETA");
 }
 
+type OperationVehicle = VehicleModel & { operation?: string | null };
+
+function normalizeOperation(value: string | null | undefined): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase();
+}
+
+/**
+ * Grupo da aba Disponibilidade da GRF (só exibição). Segue a coluna
+ * "operation" do cadastro mestre: TRANSBORDO vai para Transbordo, qualquer
+ * outro valor (DISTRIBUIÇÃO, SPOT...) para Distribuição. Sem operation
+ * (cadastro novo do portal), carreta ou truck pelo modelo vão para Transbordo.
+ *
+ * Não confundir com isTransbordoVehicle: aquela é a régua do formulário e do
+ * banco (só carreta informa placa da carreta e pallets) e não muda.
+ */
+export function isTransbordoOperation(vehicle: OperationVehicle): boolean {
+  const operation = normalizeOperation(vehicle.operation);
+  if (operation) return operation === "TRANSBORDO";
+  const text = `${vehicle.brand_model ?? ""} ${vehicle.vehicle_type ?? ""}`.toUpperCase();
+  return text.includes("CARRETA") || text.includes("TRUCK");
+}
+
+/** Pallets do transbordo: os informados para a carreta; sem eles (truck), os do cadastro. */
+export function transbordoPallets(vehicle: { pallets: number | null; trailer_pallets?: number | null }): number | null {
+  return vehicle.trailer_pallets ?? vehicle.pallets;
+}
+
 /** Opções da lista de pallets: de 1 até o número do cadastro do cavalo. */
 export function palletOptions(registryPallets: number | null | undefined): number[] {
   const max = Number(registryPallets);
@@ -129,10 +160,13 @@ export function compareDistribution(a: SortableVehicle, b: SortableVehicle): num
   );
 }
 
-/** Transbordo: mais pallets informados primeiro; empate por lotação (kg); depois placa. */
+/**
+ * Transbordo: mais pallets primeiro (informados da carreta; truck usa os do
+ * cadastro); empate por lotação (kg); depois placa.
+ */
 export function compareTransbordo(a: SortableVehicle, b: SortableVehicle): number {
   return (
-    desc(a.trailer_pallets, b.trailer_pallets) ||
+    desc(transbordoPallets(a), transbordoPallets(b)) ||
     desc(a.lotacao_kg, b.lotacao_kg) ||
     a.plate.localeCompare(b.plate)
   );

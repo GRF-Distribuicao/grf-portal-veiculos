@@ -24,7 +24,9 @@ import {
   AVAILABILITY_CUTOFF,
   compareDistribution,
   compareTransbordo,
+  isTransbordoOperation,
   isTransbordoVehicle,
+  transbordoPallets,
 } from "@/lib/grf-availability-rules";
 
 export const Route = createFileRoute("/admin/disponibilidade")({
@@ -48,13 +50,20 @@ type CompanyRow = {
   availableCount: number;
   capacityKg: number;
   pallets: number;
+  distribution?: OperationTotals;
+  transbordo?: OperationTotals;
 };
+
+type OperationTotals = { count: number; capacityKg: number; pallets: number };
+
+const emptyOperationTotals: OperationTotals = { count: 0, capacityKg: 0, pallets: 0 };
 
 type VehicleRow = {
   id: string;
   plate: string;
   brand_model: string | null;
   vehicle_type: string | null;
+  operation?: string | null;
   lotacao_kg: number | null;
   pallets: number | null;
   completion_status: string | null;
@@ -135,6 +144,8 @@ function RoutingAvailabilityPage() {
     capacityKg: 0,
     pallets: 0,
   };
+  const distributionTotals = ("distribution" in totals ? totals.distribution : null) ?? emptyOperationTotals;
+  const transbordoTotals = ("transbordo" in totals ? totals.transbordo : null) ?? emptyOperationTotals;
 
   const filteredVehicles = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -152,11 +163,11 @@ function RoutingAvailabilityPage() {
   }, [vehicles, companyFilter, search]);
 
   const distributionVehicles = useMemo(
-    () => filteredVehicles.filter((vehicle) => !vehicle.usedAt && !isTransbordoVehicle(vehicle)).sort(compareDistribution),
+    () => filteredVehicles.filter((vehicle) => !vehicle.usedAt && !isTransbordoOperation(vehicle)).sort(compareDistribution),
     [filteredVehicles],
   );
   const transbordoVehicles = useMemo(
-    () => filteredVehicles.filter((vehicle) => !vehicle.usedAt && isTransbordoVehicle(vehicle)).sort(compareTransbordo),
+    () => filteredVehicles.filter((vehicle) => !vehicle.usedAt && isTransbordoOperation(vehicle)).sort(compareTransbordo),
     [filteredVehicles],
   );
   const usedVehicles = useMemo(
@@ -164,8 +175,8 @@ function RoutingAvailabilityPage() {
     [filteredVehicles],
   );
   const usedCount = vehicles.filter((vehicle) => vehicle.usedAt).length;
-  // A seção Transbordo só aparece quando algum cavalo carreta foi informado no dia.
-  const hasTransbordo = vehicles.some((vehicle) => isTransbordoVehicle(vehicle));
+  // A seção Transbordo só aparece quando alguma carreta ou truck foi informado no dia.
+  const hasTransbordo = vehicles.some((vehicle) => isTransbordoOperation(vehicle));
   const pendingUsageId = usageMutation.isPending ? usageMutation.variables?.vehicleId ?? null : null;
 
   async function exportExcel() {
@@ -229,11 +240,21 @@ function RoutingAvailabilityPage() {
           icon={Truck}
           label="Veículos disponíveis"
           value={String(totals.availableVehicles)}
-          detail={usedCount > 0 ? `em ${formatDate(date)} · ${usedCount} usado(s)` : `em ${formatDate(date)}`}
+          detail={`em ${formatDate(date)} · ${distributionTotals.count} distribuição · ${transbordoTotals.count} transbordo${usedCount > 0 ? ` · ${usedCount} usado(s)` : ""}`}
         />
         <MetricCard icon={Building2} label="Transportadoras responderam" value={`${totals.informedCompanies}/${totals.companies}`} detail="com frota vinculada" />
-        <MetricCard icon={Weight} label="Capacidade disponível" value={formatTons(totals.capacityKg)} detail="soma das lotações conhecidas" />
-        <MetricCard icon={Package} label="Pallets disponíveis" value={totals.pallets.toLocaleString("pt-BR")} detail="capacidade cadastrada" />
+        <MetricCard
+          icon={Weight}
+          label="Distribuição"
+          value={formatTons(distributionTotals.capacityKg)}
+          detail={`${distributionTotals.count} veículo(s) · ${distributionTotals.pallets.toLocaleString("pt-BR")} pallets do cadastro`}
+        />
+        <MetricCard
+          icon={Package}
+          label="Transbordo"
+          value={`${transbordoTotals.pallets.toLocaleString("pt-BR")} pallets`}
+          detail={`${transbordoTotals.count} carreta(s)/truck(s) · ${formatTons(transbordoTotals.capacityKg)}`}
+        />
       </section>
 
       {isLoading && (
@@ -292,9 +313,22 @@ function RoutingAvailabilityPage() {
                       <div>
                         <p className="font-display text-2xl font-extrabold text-primary">{company.availableCount}</p>
                         <p className="text-xs text-muted-foreground">veículo(s) disponível(is)</p>
-                        <p className="mt-2 text-xs font-semibold text-foreground">
-                          Capacidade: {formatTons(company.capacityKg)}
-                        </p>
+                        {company.distribution && company.transbordo ? (
+                          <>
+                            <p className="mt-2 text-xs font-semibold text-foreground">
+                              Distribuição: {company.distribution.count} · {formatTons(company.distribution.capacityKg)}
+                            </p>
+                            {company.transbordo.count > 0 && (
+                              <p className="mt-0.5 text-xs font-semibold text-foreground">
+                                Transbordo: {company.transbordo.count} · {company.transbordo.pallets.toLocaleString("pt-BR")} pallets
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <p className="mt-2 text-xs font-semibold text-foreground">
+                            Capacidade: {formatTons(company.capacityKg)}
+                          </p>
+                        )}
                       </div>
                       <div className="text-right text-xs text-muted-foreground">
                         {company.informed ? (
@@ -343,7 +377,7 @@ function RoutingAvailabilityPage() {
             {hasTransbordo && (
               <AvailabilityGroup
                 title="Transbordo"
-                summary={`${transbordoVehicles.length} cavalo(s) · ${transbordoVehicles.reduce((sum, vehicle) => sum + (vehicle.trailer_pallets ?? 0), 0).toLocaleString("pt-BR")} pallets informados · mais pallets primeiro`}
+                summary={`${transbordoVehicles.length} carreta(s)/truck(s) · ${transbordoVehicles.reduce((sum, vehicle) => sum + (transbordoPallets(vehicle) ?? 0), 0).toLocaleString("pt-BR")} pallets · mais pallets primeiro`}
                 vehicles={transbordoVehicles}
                 mode="transbordo"
                 usageEnabled={usageEnabled}
@@ -424,12 +458,12 @@ function AvailabilityGroup({
             <table className="w-full min-w-[980px] text-sm">
               <thead className="bg-surface text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">{mode === "transbordo" ? "Cavalo" : "Placa"}</th>
+                  <th className="px-4 py-3 font-semibold">Placa</th>
                   {showTrailer && <th className="px-4 py-3 font-semibold">Carreta</th>}
                   <th className="px-4 py-3 font-semibold">Transportadora</th>
                   <th className="px-4 py-3 font-semibold">Veículo</th>
                   <th className="px-4 py-3 text-right font-semibold">Lotação</th>
-                  <th className="px-4 py-3 text-right font-semibold">{showTrailer ? "Pallets informados" : "Pallets"}</th>
+                  <th className="px-4 py-3 text-right font-semibold">Pallets</th>
                   <th className="px-4 py-3 font-semibold">Obs</th>
                   <th className="px-4 py-3 font-semibold">Sankhya</th>
                   <th className="px-4 py-3 font-semibold">{mode === "usados" ? "Usado às" : "Atualizado"}</th>
@@ -452,7 +486,7 @@ function AvailabilityGroup({
                       <td className="px-4 py-3 text-muted-foreground">{vehicle.brand_model || vehicle.vehicle_type || "—"}</td>
                       <td className="px-4 py-3 text-right">{vehicle.lotacao_kg == null ? "—" : `${vehicle.lotacao_kg.toLocaleString("pt-BR")} kg`}</td>
                       <td className="px-4 py-3 text-right">
-                        {showTrailer && transbordo ? vehicle.trailer_pallets ?? "—" : vehicle.pallets ?? "—"}
+                        {showTrailer ? transbordoPallets(vehicle) ?? "—" : vehicle.pallets ?? "—"}
                       </td>
                       <td className="max-w-[220px] px-4 py-3 text-xs text-muted-foreground">
                         {vehicle.availability_note ? <span className="line-clamp-2" title={vehicle.availability_note}>{vehicle.availability_note}</span> : "—"}

@@ -2,7 +2,9 @@ import * as XLSX from "xlsx";
 import {
   compareDistribution,
   compareTransbordo,
+  isTransbordoOperation,
   isTransbordoVehicle,
+  transbordoPallets,
 } from "./grf-availability-rules.ts";
 
 export type AvailabilityExportRow = {
@@ -10,6 +12,7 @@ export type AvailabilityExportRow = {
   transporterName: string;
   brand_model: string | null;
   vehicle_type: string | null;
+  operation?: string | null;
   lotacao_kg: number | null;
   pallets: number | null;
   trailer_plate: string | null;
@@ -50,11 +53,13 @@ function formatTime(value: string | null) {
  * "Usado" marcando o que a roteirização já usou.
  */
 export function buildAvailabilityWorkbook(rows: AvailabilityExportRow[]) {
-  const distribution = rows.filter((row) => !isTransbordoVehicle(row)).sort(compareDistribution);
-  const transbordo = rows.filter((row) => isTransbordoVehicle(row)).sort(compareTransbordo);
+  const distribution = rows.filter((row) => !isTransbordoOperation(row)).sort(compareDistribution);
+  const transbordo = rows.filter((row) => isTransbordoOperation(row)).sort(compareTransbordo);
 
   const values = [...distribution, ...transbordo].map((row) => {
-    const isTransbordo = isTransbordoVehicle(row);
+    const isTransbordo = isTransbordoOperation(row);
+    // Placa da carreta só existe para carreta; truck usa os pallets do cadastro.
+    const hasTrailer = isTransbordoVehicle(row);
     return [
       isTransbordo ? "Transbordo" : "Distribuição",
       row.plate,
@@ -62,8 +67,8 @@ export function buildAvailabilityWorkbook(rows: AvailabilityExportRow[]) {
       row.brand_model || row.vehicle_type || "",
       row.lotacao_kg ?? "",
       row.pallets ?? "",
-      isTransbordo ? (row.trailer_plate ?? "") : "",
-      isTransbordo ? (row.trailer_pallets ?? "") : "",
+      isTransbordo && hasTrailer ? (row.trailer_plate ?? "") : "",
+      isTransbordo ? (transbordoPallets(row) ?? "") : "",
       row.availability_note ?? "",
       row.sankhya_registered ? "Sim" : "Não",
       formatTime(row.submittedAt),

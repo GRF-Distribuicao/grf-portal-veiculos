@@ -9,6 +9,27 @@
 /** Horário de corte, no horário de Brasília. Depois dele ninguém altera o dia. */
 export const AVAILABILITY_CUTOFF = "16:30";
 
+/**
+ * Datas que o transportador pode escolher (migração 20): hoje e, quando hoje
+ * é sexta, também sábado. As duas fecham sexta às 16:30. `today` é a data do
+ * banco (fleet_availability_window), no formato AAAA-MM-DD.
+ */
+export function availabilityDateOptions(today: string): string[] {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(today);
+  if (!match) return [today];
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  if (date.getUTCDay() !== 5) return [today];
+  date.setUTCDate(date.getUTCDate() + 1);
+  return [today, date.toISOString().slice(0, 10)];
+}
+
+/** Sábado (AAAA-MM-DD), para a tela explicar que a lista dele fecha na sexta. */
+export function isSaturdayISO(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))).getUTCDay() === 6;
+}
+
 /** Tamanho máximo da observação de cada placa. */
 export const NOTE_MAX_LENGTH = 200;
 

@@ -6,6 +6,7 @@ import {
   isTransbordoVehicle,
   transbordoPallets,
 } from "./grf-availability-rules.ts";
+import { routesText, type VehicleRoutes } from "./grf-routes.ts";
 
 export type AvailabilityExportRow = {
   plate: string;
@@ -21,6 +22,7 @@ export type AvailabilityExportRow = {
   sankhya_registered: boolean | null;
   submittedAt: string | null;
   usedAt: string | null;
+  routes?: VehicleRoutes | null;
 };
 
 const HEADERS = [
@@ -33,6 +35,7 @@ const HEADERS = [
   "Placa da carreta",
   "Pallets informados",
   "Observação",
+  "Rotas",
   "Sankhya",
   "Atualizado",
   "Usado",
@@ -70,6 +73,7 @@ export function buildAvailabilityWorkbook(rows: AvailabilityExportRow[]) {
       isTransbordo && hasTrailer ? (row.trailer_plate ?? "") : "",
       isTransbordo ? (transbordoPallets(row) ?? "") : "",
       row.availability_note ?? "",
+      routesText(row.routes),
       row.sankhya_registered ? "Sim" : "Não",
       formatTime(row.submittedAt),
       row.usedAt ? "Sim" : "Não",

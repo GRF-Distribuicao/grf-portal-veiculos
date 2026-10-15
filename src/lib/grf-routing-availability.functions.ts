@@ -175,6 +175,12 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
     // Veículos já usados pela roteirização neste dia (migração 19). Tolerante
     // a falha: sem a tabela, a aba continua funcionando sem a marcação.
     const usage = await loadRoutingUsage(db, data.date);
+    // Rotas que cada veículo conhece (migração 21). Tolerante a falha: sem a
+    // tabela, a aba continua funcionando sem a coluna de rotas.
+    const routesByVehicle = await loadVehicleRoutes(
+      db,
+      companyRows.flatMap((company) => company.vehicles.map((vehicle) => vehicle.id)),
+    );
 
     const allAvailableVehicles = companyRows.flatMap((company) =>
       company.vehicles.map((vehicle) => ({
@@ -184,6 +190,7 @@ export const listRoutingAvailability = createServerFn({ method: "POST" })
         submittedAt: company.submittedAt,
         revision: company.revision,
         usedAt: usage?.get(vehicle.id)?.marked_at ?? null,
+        routes: routesByVehicle?.get(vehicle.id) ?? null,
       })),
     );
 
@@ -306,6 +313,31 @@ type UsageRow = {
   plate: string;
   brand_model: string | null;
 };
+
+async function loadVehicleRoutes(
+  db: any,
+  vehicleIds: string[],
+): Promise<Map<string, { allRoutes: boolean; routes: string[] }> | null> {
+  const rows = new Map<string, { allRoutes: boolean; routes: string[] }>();
+  const ids = Array.from(new Set(vehicleIds));
+  for (let offset = 0; offset < ids.length; offset += 200) {
+    const { data, error } = await db
+      .from("vehicle_routes")
+      .select("vehicle_id, all_routes, routes")
+      .in("vehicle_id", ids.slice(offset, offset + 200));
+    if (error) {
+      console.error("[disponibilidade] falha ao ler rotas dos veículos:", error.message);
+      return null;
+    }
+    for (const row of (data ?? []) as any[]) {
+      rows.set(String(row.vehicle_id), {
+        allRoutes: Boolean(row.all_routes),
+        routes: Array.isArray(row.routes) ? row.routes.map(String) : [],
+      });
+    }
+  }
+  return rows;
+}
 
 async function loadRoutingUsage(db: any, date: string): Promise<Map<string, UsageRow> | null> {
   const { data, error } = await db

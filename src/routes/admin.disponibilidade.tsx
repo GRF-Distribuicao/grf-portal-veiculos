@@ -28,6 +28,7 @@ import {
   isTransbordoVehicle,
   transbordoPallets,
 } from "@/lib/grf-availability-rules";
+import { foldText, routeChips, routesSearchText, type VehicleRoutes } from "@/lib/grf-routes";
 
 export const Route = createFileRoute("/admin/disponibilidade")({
   head: () => ({
@@ -77,6 +78,7 @@ type VehicleRow = {
   submittedAt: string | null;
   revision: number | null;
   usedAt: string | null;
+  routes?: VehicleRoutes | null;
 };
 
 type WithdrawnRow = {
@@ -157,7 +159,8 @@ function RoutingAvailabilityPage() {
         vehicle.plate.toLowerCase().includes(plateTerm) ||
         String(vehicle.transporterName ?? "").toLowerCase().includes(term) ||
         String(vehicle.brand_model ?? "").toLowerCase().includes(term) ||
-        String(vehicle.vehicle_type ?? "").toLowerCase().includes(term)
+        String(vehicle.vehicle_type ?? "").toLowerCase().includes(term) ||
+        routesSearchText(vehicle.routes).includes(foldText(term))
       );
     });
   }, [vehicles, companyFilter, search]);
@@ -360,7 +363,7 @@ function RoutingAvailabilityPage() {
               </div>
               <div className="relative w-full sm:w-80">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar placa, modelo ou transportadora" className="bg-card pl-9" />
+                <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar placa, modelo, transportadora ou rota" className="bg-card pl-9" />
               </div>
             </div>
 
@@ -402,6 +405,28 @@ function RoutingAvailabilityPage() {
         </>
       )}
     </main>
+  );
+}
+
+function RouteChips({ routes }: { routes: VehicleRoutes | null | undefined }) {
+  const { visible, hidden, full } = routeChips(routes);
+  if (!visible.length) return <span className="text-muted-foreground">—</span>;
+  return (
+    <span className="flex max-w-[260px] flex-wrap items-center gap-1" title={full}>
+      {visible.map((label) => (
+        <span
+          key={label}
+          className={
+            label === "Todas"
+              ? "rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary uppercase"
+              : "rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground"
+          }
+        >
+          {label}
+        </span>
+      ))}
+      {hidden > 0 && <span className="text-[11px] font-bold text-muted-foreground">+{hidden}</span>}
+    </span>
   );
 }
 
@@ -465,7 +490,7 @@ function AvailabilityGroup({
                   <th className="px-4 py-3 text-right font-semibold">Lotação</th>
                   <th className="px-4 py-3 text-right font-semibold">Pallets</th>
                   <th className="px-4 py-3 font-semibold">Obs</th>
-                  <th className="px-4 py-3 font-semibold">Sankhya</th>
+                  <th className="px-4 py-3 font-semibold">Rotas</th>
                   <th className="px-4 py-3 font-semibold">{mode === "usados" ? "Usado às" : "Atualizado"}</th>
                   {usageEnabled && <th className="px-4 py-3 text-right font-semibold">Roteirização</th>}
                 </tr>
@@ -492,9 +517,7 @@ function AvailabilityGroup({
                         {vehicle.availability_note ? <span className="line-clamp-2" title={vehicle.availability_note}>{vehicle.availability_note}</span> : "—"}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={vehicle.sankhya_registered ? "rounded-full bg-success/10 px-2 py-1 text-[10px] font-bold text-success uppercase" : "rounded-full bg-muted px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase"}>
-                          {vehicle.sankhya_registered ? "Sim" : "Não"}
-                        </span>
+                        <RouteChips routes={vehicle.routes} />
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{formatTime(mode === "usados" ? vehicle.usedAt : vehicle.submittedAt)}</td>
                       {usageEnabled && (

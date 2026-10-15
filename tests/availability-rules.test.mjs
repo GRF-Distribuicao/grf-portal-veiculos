@@ -223,3 +223,32 @@ test('sexta: o transportador escolhe hoje ou sábado; outros dias só hoje', () 
   assert.equal(isSaturdayISO('2026-10-10'), true);
   assert.equal(isSaturdayISO('2026-10-09'), false);
 });
+
+test('rotas: abrevia, mostra até 3 e conta o resto; Todas vem primeiro', async () => {
+  const { routeChips, routesText, routesSearchText, shortRoute } = await import('../src/lib/grf-routes.ts');
+  assert.equal(shortRoute('Nova Iguaçu'), 'N. Iguaçu');
+  assert.equal(shortRoute('Tijuca'), 'Tijuca');
+  const dez = { allRoutes: false, routes: ['São João de Meriti', 'Mesquita', 'Penha', 'Ilha do Governador', 'Nilópolis', 'Madureira', 'Irajá', 'Seropédica', 'Itaguaí', 'Japeri'] };
+  assert.deepEqual(routeChips(dez), { visible: ['S.J. Meriti', 'Mesquita', 'Penha'], hidden: 7, full: dez.routes.join(', ') });
+  const coringa = { allRoutes: true, routes: ['Duque de Caxias'] };
+  assert.deepEqual(routeChips(coringa).visible, ['Todas', 'Caxias']);
+  assert.equal(routeChips(coringa).hidden, 0);
+  assert.deepEqual(routeChips({ allRoutes: true, routes: [] }).visible, ['Todas']);
+  assert.deepEqual(routeChips(null), { visible: [], hidden: 0, full: '' });
+  assert.equal(routesText(coringa), 'Todas, Duque de Caxias');
+  assert.equal(routesText(null), '');
+  assert.ok(routesSearchText({ allRoutes: false, routes: ['Maricá'] }).includes('marica'));
+  assert.ok(routesSearchText(coringa).includes('caxias'));
+  assert.ok(routesSearchText(coringa).includes('todas'));
+});
+
+test('Excel: coluna Rotas por extenso, Sankhya continua', () => {
+  const row = { plate: 'PXI4B41', transporterName: 'TRANSGARRA RIO', brand_model: 'FIORINO', vehicle_type: null, operation: 'DISTRIBUIÇÃO', lotacao_kg: 500, pallets: 1, trailer_plate: null, trailer_pallets: null, availability_note: null, sankhya_registered: true, submittedAt: null, usedAt: null, routes: { allRoutes: true, routes: ['Nova Iguaçu'] } };
+  const semRota = { ...row, plate: 'AAA1A11', routes: null };
+  const book = XLSX.read(XLSX.write(buildAvailabilityWorkbook([row, semRota]), { type: 'buffer', bookType: 'xlsx' }), { type: 'buffer' });
+  const sheet = XLSX.utils.sheet_to_json(book.Sheets['Disponibilidade']);
+  const byPlate = Object.fromEntries(sheet.map((r) => [r['Placa'], r]));
+  assert.equal(byPlate['PXI4B41']['Rotas'], 'Todas, Nova Iguaçu');
+  assert.equal(byPlate['AAA1A11']['Rotas'] ?? '', '');
+  assert.equal(byPlate['PXI4B41']['Sankhya'], 'Sim');
+});

@@ -23,5 +23,31 @@ export const exportSankhyaQueue = createServerFn({ method: "POST" })
       rows.push(...(data ?? []));
       if (!data || data.length < pageSize) break;
     }
-    return rows;
+    return withSankhyaPartner(supabaseAdmin, rows);
   });
+
+/**
+ * Parceiro Sankhya = transportadora ativa do veículo no portal (migração 22).
+ * Sem vínculo ou sem código, a coluna sai vazia; a exportação não falha.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function withSankhyaPartner(db: any, rows: Record<string, ExportValue>[]) {
+  const vehicleIds = [...new Set(rows.map((r) => r["vehicle_id"]).filter((v): v is string => typeof v === "string"))];
+  const companyByVehicle = new Map<string, { name: string; codparc: number | null }>();
+  for (let i = 0; i < vehicleIds.length; i += 200) {
+    const { data, error } = await db
+      .from("transporter_vehicle_links")
+      .select("vehicle_id, transporter_companies(name, sankhya_codparc)")
+      .eq("active", true)
+      .in("vehicle_id", vehicleIds.slice(i, i + 200));
+    if (error) throw new Error("Não foi possível consultar a transportadora dos veículos.");
+    for (const link of (data ?? []) as unknown as { vehicle_id: string; transporter_companies: { name: string; sankhya_codparc: number | null } | null }[]) {
+      const company = link.transporter_companies;
+      if (company) companyByVehicle.set(link.vehicle_id, { name: company.name, codparc: company.sankhya_codparc });
+    }
+  }
+  return rows.map((row) => {
+    const company = typeof row["vehicle_id"] === "string" ? companyByVehicle.get(row["vehicle_id"]) : undefined;
+    return { ...row, portal_company: company?.name ?? null, sankhya_codparc: company?.codparc ?? null };
+  });
+}

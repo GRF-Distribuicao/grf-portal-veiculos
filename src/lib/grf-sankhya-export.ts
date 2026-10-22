@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { sankhyaTipoCarroceria, sankhyaTipoRodado } from "./grf-sankhya-codes.ts";
 
 type Row = Record<string, unknown>;
 type Field = readonly [string, string];
@@ -48,6 +49,13 @@ const documentFields: Field[] = [
   ["doc_type", "Tipo de anexo"], ["file_name", "Nome do arquivo"], ["file_size", "Tamanho (bytes)"],
   ["mime_type", "Formato"], ["status", "Status do anexo"], ["created_at", "Enviado em"],
 ];
+// Campos no formato do cadastro de veículo do Sankhya (só veículos novos).
+const sankhyaHeaders = ["Parceiro Sankhya (código)", "Transportadora no portal", "Tipo de Rodado (Sankhya)", "Tipo de Carroceria (Sankhya)"];
+const sankhyaFields = (row: Row): (string | number)[] => [
+  cell(row["sankhya_codparc"]), cell(row["portal_company"]),
+  sankhyaTipoRodado(row["vehicle_type"] as string | null),
+  sankhyaTipoCarroceria(row["body_type"] as string | null, row["vehicle_type"] as string | null),
+];
 const related = (value: unknown): Row[] =>
   Array.isArray(value) ? value as Row[] : value && typeof value === "object" ? [value as Row] : [];
 const cell = (value: unknown): string | number =>
@@ -64,8 +72,9 @@ export function buildSankhyaWorkbook(rows: Row[]) {
     sheet["!autofilter"] = { ref: sheet["!ref"]! };
     XLSX.utils.book_append_sheet(book, sheet, name);
   };
-  addSheet("Veículos", [...vehicleFields, ...transporterFields, ...driverFields, ...trackingFields, ...masterFields].map(([, label]) => label),
+  addSheet("Veículos", [...sankhyaHeaders, ...[...vehicleFields, ...transporterFields, ...driverFields, ...trackingFields, ...masterFields].map(([, label]) => label)],
     rows.map((row) => [
+      ...sankhyaFields(row),
       ...fields(row, vehicleFields), ...fields(related(row["transporters"])[0] ?? {}, transporterFields),
       ...driverFields.map(([key]) => related(row["drivers"]).map((d) => cell(d[key])).join(" | ")),
       ...trackingFields.map(([key]) => related(row["tracking_devices"]).map((t) => cell(t[key])).join(" | ")),

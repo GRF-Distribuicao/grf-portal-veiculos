@@ -3,7 +3,8 @@
  * que a transportadora já preenche no portal. Só para veículos novos: o que já
  * está no Sankhya não é reenviado.
  *
- * Tipo de Rodado vem do "Tipo de veículo" do portal; o "Tipo de rodado" do
+ * Mesmo mapeamento das funções SQL da migração 24. Tipo de Rodado vem do
+ * "Tipo de veículo" do portal; o "Tipo de rodado" do
  * portal (Simples, 6x2…) é outra coisa (eixos). Carreta não tem rodado próprio
  * (00), igual aos cadastros existentes no Sankhya.
  */
@@ -29,7 +30,7 @@ const CARROCERIA: Record<string, string> = {
   BASCULANTE: "01-Aberta",
   BAU: "02-Fechada/Baú",
   "BAU FRIGORIFICO": "02-Fechada/Baú",
-  GRANELEIRO: "03-Granelera",
+  GRANELEIRO: "03-Graneleira",
   "PORTA-CONTAINER": "04-Porta Container",
   SIDER: "05-Sider",
 };

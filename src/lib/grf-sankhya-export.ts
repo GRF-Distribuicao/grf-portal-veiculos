@@ -51,11 +51,16 @@ const documentFields: Field[] = [
 ];
 // Campos no formato do cadastro de veículo do Sankhya (só veículos novos).
 const sankhyaHeaders = ["Parceiro Sankhya (código)", "Transportadora no portal", "Tipo de Rodado (Sankhya)", "Tipo de Carroceria (Sankhya)"];
-const sankhyaFields = (row: Row): (string | number)[] => [
-  cell(row["sankhya_codparc"]), cell(row["portal_company"]),
-  sankhyaTipoRodado(row["vehicle_type"] as string | null),
-  sankhyaTipoCarroceria(row["body_type"] as string | null, row["vehicle_type"] as string | null),
-];
+// O que já está gravado no veículo (vindo do Sankhya) tem prioridade sobre a conversão.
+const sankhyaFields = (row: Row): (string | number)[] => {
+  const master = related(row["vehicles"])[0] ?? {};
+  return [
+    cell(row["sankhya_codparc"]), cell(row["portal_company"]),
+    (master["sankhya_tipo_rodado"] as string | null) || sankhyaTipoRodado(row["vehicle_type"] as string | null),
+    (master["sankhya_tipo_carroceria"] as string | null) ||
+      sankhyaTipoCarroceria(row["body_type"] as string | null, row["vehicle_type"] as string | null),
+  ];
+};
 const related = (value: unknown): Row[] =>
   Array.isArray(value) ? value as Row[] : value && typeof value === "object" ? [value as Row] : [];
 const cell = (value: unknown): string | number =>

@@ -19,7 +19,7 @@ test('carroceria Sankhya vem da carroceria do portal', () => {
   assert.equal(sankhyaTipoCarroceria('Baú'), '02-Fechada/Baú');
   assert.equal(sankhyaTipoCarroceria('Baú frigorífico'), '02-Fechada/Baú');
   for (const b of ['Carga seca', 'Prancha', 'Tanque', 'Basculante']) assert.equal(sankhyaTipoCarroceria(b), '01-Aberta');
-  assert.equal(sankhyaTipoCarroceria('Graneleiro'), '03-Granelera');
+  assert.equal(sankhyaTipoCarroceria('Graneleiro'), '03-Graneleira');
   assert.equal(sankhyaTipoCarroceria('Porta-container'), '04-Porta Container');
   assert.equal(sankhyaTipoCarroceria('Baú', 'Cavalo mecânico'), '00-Não Aplicável');
   assert.equal(sankhyaTipoCarroceria(null), '');
@@ -43,4 +43,28 @@ test('planilha Sankhya traz parceiro, transportadora, rodado e carroceria primei
   assert.deepEqual(rows[1].slice(0, 4), [50002, 'SUPER VINHOS', '01-Truck', '05-Sider']);
   assert.deepEqual(rows[2].slice(0, 4), ['', '', '02-Toco', '02-Fechada/Baú']);
   assert.equal(rows[1][4], 'P1');
+});
+
+test('planilha usa o rodado/carroceria gravado no veículo antes da conversão', async () => {
+  const XLSX = await import('xlsx');
+  const { buildSankhyaWorkbook } = await import('../src/lib/grf-sankhya-export.ts');
+  const book = buildSankhyaWorkbook([
+    { protocol: 'P3', plate: 'AAA1A11', vehicle_type: '4- CAMINHAO', body_type: null,
+      vehicles: { sankhya_tipo_rodado: '06-Outros', sankhya_tipo_carroceria: '02-Fechada/Baú' } },
+  ]);
+  const rows = XLSX.utils.sheet_to_json(book.Sheets['Veículos'], { header: 1, defval: '' });
+  assert.deepEqual(rows[1].slice(2, 4), ['06-Outros', '02-Fechada/Baú']);
+});
+
+test('conversão em TypeScript igual à das funções SQL da migração 24', async () => {
+  const fs = await import('node:fs');
+  const sql = fs.readFileSync(new URL('../supabase/migrations/24_codigos_sankhya_veiculo.sql', import.meta.url), 'utf8');
+  for (const [tipo, codigo] of [['TRUCK', '01-Truck'], ['TOCO', '02-Toco'], ['CAVALO MECANICO', '03-Cavalo Mecânico'], ['VAN', '04-Van'], ['UTILITARIO', '05-Utilitário'], ['CARRETA', '00-Não Aplicável'], ['VUC', '06-Outros']]) {
+    assert.match(sql, new RegExp(`when '${tipo}' then '${codigo}'`));
+    assert.equal(sankhyaTipoRodado(tipo), codigo);
+  }
+  for (const [carr, codigo] of [['BAU', '02-Fechada/Baú'], ['SIDER', '05-Sider'], ['GRANELEIRO', '03-Graneleira'], ['PORTA-CONTAINER', '04-Porta Container'], ['CARGA SECA', '01-Aberta']]) {
+    assert.match(sql, new RegExp(`when '${carr}' then '${codigo}'`));
+    assert.equal(sankhyaTipoCarroceria(carr), codigo);
+  }
 });

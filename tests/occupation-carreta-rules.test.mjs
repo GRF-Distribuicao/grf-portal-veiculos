@@ -22,7 +22,7 @@ function grab(name) {
 const ctx = { FLEET_DB: {}, FLEET_CAP: {}, TARGET_OCC: 0.85, Math, String, isNaN };
 vm.createContext(ctx);
 vm.runInContext(
-  ["plateKey", "fleetLookup", "isRksPlate", "weightedUtilization", "enrichRecord"].map(grab).join("\n"),
+  ["plateKey", "fleetLookup", "normModeloFiltro", "filterLabels", "isRksPlate", "weightedUtilization", "enrichRecord"].map(grab).join("\n"),
   ctx,
 );
 ctx.FLEET_DB = {

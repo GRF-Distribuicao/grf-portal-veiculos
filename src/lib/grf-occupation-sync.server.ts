@@ -446,6 +446,8 @@ export interface FleetEntry {
   modelo: string | null;
   tipoVeic: string | null;
   transportadora: string | null;
+  /** Empresa do vínculo ativo (transporter_companies) — só para o filtro do painel. */
+  empresa: string | null;
 }
 
 export interface FleetResult {
@@ -489,6 +491,7 @@ export async function loadFleetCapacity(): Promise<FleetResult> {
   const db = supabaseAdmin as any;
 
   const fleet: Record<string, FleetEntry> = {};
+  const empresaPorVeiculo = await loadCompanyByVehicle(db);
   let count = 0;
   let withCapKg = 0;
   let withPallets = 0;
@@ -497,7 +500,7 @@ export async function loadFleetCapacity(): Promise<FleetResult> {
     const { data, error } = await db
       .from("vehicles")
       .select(
-        "plate, lotacao_kg, max_capacity_kg, pallets, brand_model, vehicle_type, transporter_name",
+        "plate, lotacao_kg, max_capacity_kg, pallets, brand_model, vehicle_type, transporter_name, id",
       )
       .order("plate", { ascending: true })
       .range(offset, offset + READ_PAGE_SIZE - 1);
@@ -525,6 +528,7 @@ export async function loadFleetCapacity(): Promise<FleetResult> {
             : null,
         tipoVeic: typeof row["vehicle_type"] === "string" ? row["vehicle_type"] : null,
         transportadora: typeof row["transporter_name"] === "string" ? row["transporter_name"] : null,
+        empresa: empresaPorVeiculo.get(String(row["id"])) ?? null,
       };
     }
 
@@ -532,6 +536,30 @@ export async function loadFleetCapacity(): Promise<FleetResult> {
   }
 
   return { fleet, count, withCapKg, withPallets };
+}
+
+/**
+ * Nome da transportadora pelo vínculo ativo do veículo. Se a leitura falhar, o
+ * filtro só fica sem empresa ("Sem transportadora"); a ocupação não depende disso.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function loadCompanyByVehicle(db: any): Promise<Map<string, string>> {
+  const byVehicle = new Map<string, string>();
+  for (let offset = 0; ; offset += READ_PAGE_SIZE) {
+    const { data, error } = await db
+      .from("transporter_vehicle_links")
+      .select("vehicle_id, transporter_companies(name)")
+      .eq("active", true)
+      .order("vehicle_id", { ascending: true })
+      .range(offset, offset + READ_PAGE_SIZE - 1);
+    if (error) return byVehicle;
+    const page = Array.isArray(data) ? data : [];
+    for (const link of page as { vehicle_id: string; transporter_companies: { name: string } | null }[]) {
+      if (link.transporter_companies?.name) byVehicle.set(link.vehicle_id, link.transporter_companies.name);
+    }
+    if (page.length < READ_PAGE_SIZE) break;
+  }
+  return byVehicle;
 }
 
 function describeFleetError(error: { message?: string; code?: string }): string {

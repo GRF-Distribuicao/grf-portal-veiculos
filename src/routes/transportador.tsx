@@ -18,6 +18,7 @@ import {
 } from "@/lib/grf-fleet-eligibility";
 import {
   AVAILABILITY_CUTOFF,
+  cutoffSuffix,
   NOTE_MAX_LENGTH,
   availabilityDateOptions,
   emptyDetail,
@@ -448,7 +449,7 @@ function TransporterArea() {
   async function saveAvailability() {
     if (!companyId || !userId || switchingDate) return;
     if (closed) {
-      toast.error(`Disponibilidade de ${formatDate(today)} encerrada às ${AVAILABILITY_CUTOFF}. Não é possível alterar.`);
+      toast.error(`Disponibilidade de ${formatDate(today)} encerrada${cutoffSuffix()}. Não é possível alterar.`);
       return;
     }
 
@@ -649,13 +650,15 @@ function TransporterArea() {
                   </Button>
                 ))}
                 {switchingDate && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
-                <span className="text-xs text-muted-foreground">Na sexta, informe também a lista de sábado. As duas fecham hoje às {AVAILABILITY_CUTOFF}.</span>
+                <span className="text-xs text-muted-foreground">Na sexta, informe também a lista de sábado. As duas fecham hoje{AVAILABILITY_CUTOFF ? ` às ${AVAILABILITY_CUTOFF}` : ", até meia-noite"}.</span>
               </div>
             )}
             {!closed && (
               <p className="mt-1 text-xs font-semibold text-muted-foreground">
                 <Clock3 className="mr-1 inline size-3.5" />
-                Você pode informar e alterar até {AVAILABILITY_CUTOFF} de hoje (horário de Brasília).
+                {AVAILABILITY_CUTOFF
+                  ? `Você pode informar e alterar até ${AVAILABILITY_CUTOFF} de hoje (horário de Brasília).`
+                  : "Você pode informar e alterar durante todo o dia de hoje."}
               </p>
             )}
           </div>
@@ -672,7 +675,7 @@ function TransporterArea() {
           <div className="mt-4 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
             <Lock className="mt-0.5 size-4 shrink-0" />
             <p>
-              <strong>Disponibilidade de {formatDate(today)} encerrada às {AVAILABILITY_CUTOFF}.</strong> Depois do horário de corte
+              <strong>Disponibilidade de {formatDate(today)} encerrada{cutoffSuffix()}.</strong> Depois do encerramento
               não é possível alterar. O que está marcado abaixo é o que a roteirização recebeu.
               {isSaturdayISO(today) && " A lista de sábado é informada na sexta-feira."}
             </p>

@@ -252,3 +252,13 @@ test('Excel: coluna Rotas por extenso, Sankhya continua', () => {
   assert.equal(byPlate['AAA1A11']['Rotas'] ?? '', '');
   assert.equal(byPlate['PXI4B41']['Sankhya'], 'Sim');
 });
+
+test('sem horário de corte (migração 25): constante nula e mensagem sem horário', async () => {
+  const { AVAILABILITY_CUTOFF, cutoffSuffix } = await import('../src/lib/grf-availability-rules.ts');
+  assert.equal(AVAILABILITY_CUTOFF, null);
+  assert.equal(cutoffSuffix(), '');
+  const fs = await import('node:fs');
+  const sql = fs.readFileSync(new URL('../supabase/migrations/25_availability_no_cutoff.sql', import.meta.url), 'utf8');
+  assert.doesNotMatch(sql.split('$$')[1], /16:30/);
+  assert.match(sql, /null::timestamptz/);
+});

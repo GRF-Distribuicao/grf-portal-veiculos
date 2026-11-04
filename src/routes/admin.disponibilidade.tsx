@@ -221,7 +221,9 @@ function RoutingAvailabilityPage() {
           </p>
           <p className="mt-1 max-w-3xl text-xs font-semibold text-muted-foreground">
             <Clock3 className="mr-1 inline size-3.5" />
-            As transportadoras podem alterar a disponibilidade do dia até {AVAILABILITY_CUTOFF} (horário de Brasília). Depois disso fica travada.
+            {AVAILABILITY_CUTOFF
+              ? `As transportadoras podem alterar a disponibilidade do dia até ${AVAILABILITY_CUTOFF} (horário de Brasília). Depois disso fica travada.`
+              : "As transportadoras podem alterar a disponibilidade durante todo o dia (sem horário de corte). Dias anteriores ficam travados."}
           </p>
         </div>
 

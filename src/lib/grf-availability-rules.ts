@@ -6,12 +6,22 @@
  * erro antes do envio.
  */
 
-/** Horário de corte, no horário de Brasília. Depois dele ninguém altera o dia. */
-export const AVAILABILITY_CUTOFF = "16:30";
+/**
+ * Horário de corte, no horário de Brasília. Nulo = sem horário (migração 25,
+ * temporário): o dia fica aberto até meia-noite. Para voltar a 16:30, rode o
+ * rollback R9 e volte esta constante para "16:30".
+ */
+export const AVAILABILITY_CUTOFF: string | null = null;
+
+/** "às 16:30" ou, sem horário de corte, vazio. */
+export function cutoffSuffix(): string {
+  return AVAILABILITY_CUTOFF ? ` às ${AVAILABILITY_CUTOFF}` : "";
+}
 
 /**
  * Datas que o transportador pode escolher (migração 20): hoje e, quando hoje
- * é sexta, também sábado. As duas fecham sexta às 16:30. `today` é a data do
+ * é sexta, também sábado. As duas fecham no fim de sexta (sem horário de
+ * corte, migração 25; antes 16:30). `today` é a data do
  * banco (fleet_availability_window), no formato AAAA-MM-DD.
  */
 export function availabilityDateOptions(today: string): string[] {
